@@ -1,0 +1,21 @@
+-- Removes exactly the rows created by demo_seed.sql (ids 900001+ / demo plants). Local/dev only.
+BEGIN;
+DELETE FROM dashboard_config          WHERE id = 900001;
+DELETE FROM user_plant_map            WHERE id = 900001;
+DELETE FROM user_client_map           WHERE id BETWEEN 900001 AND 900005;
+DELETE FROM "user"                    WHERE id BETWEEN 900001 AND 900005;
+DELETE FROM iex_tod_daily_obligation  WHERE plant_id BETWEEN 900001 AND 900004 AND id BETWEEN 900001 AND 909999;
+DELETE FROM plant_open_access_charges WHERE id BETWEEN 900001 AND 900004;
+DELETE FROM state_grid_discom_tariff  WHERE plant_id BETWEEN 900001 AND 900004 AND id BETWEEN 900001 AND 909999;
+DELETE FROM banking                   WHERE plant_id = 900001 AND id >= 900001;
+DELETE FROM prebid_plan               WHERE plant_id BETWEEN 900001 AND 900004 AND id BETWEEN 900001 AND 900099;
+DELETE FROM trading_result_block      WHERE trading_result_id BETWEEN 900001 AND 909999;
+DELETE FROM trading_result            WHERE id BETWEEN 900001 AND 909999;
+DELETE FROM plant_processed_meter_data WHERE plant_id BETWEEN 900001 AND 900005 AND id >= 900000000000;
+DELETE FROM plant_gen_con_mapping     WHERE id = 900001;
+DELETE FROM market_types              WHERE id BETWEEN 900001 AND 900003;
+DELETE FROM markets                   WHERE id = 900001;
+DELETE FROM plant                     WHERE plant_id BETWEEN 900001 AND 900005;
+DELETE FROM plant_type                WHERE id BETWEEN 900001 AND 900003;
+DELETE FROM client                    WHERE client_id IN (900001, 900002);
+COMMIT;

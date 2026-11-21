@@ -1,8 +1,5 @@
-node_modules
-.next
-out
-.vercel
-.env*
-!.env.example
-next-env.d.ts
-*.tsbuildinfo
+node_modules/
+.env
+.env.local
+__pycache__/
+*.pyc

@@ -1,0 +1,126 @@
+/* ergOS client view: layout only. Colours, fonts, radii and spacing come from Harmony tokens. */
+
+/* ---------------------------------------------------------------- frame */
+.ecv-screen { min-height: 100vh; align-items: flex-start; }
+.ecv-screen > .eg-side { position: sticky; top: var(--space-6); height: calc(100vh - 2 * var(--space-6)); }
+.ecv-nav-soon { opacity: .55; cursor: default; }
+.ecv-nav-soon::after { content: "Soon"; margin-left: auto; font-size: 11px; color: var(--ink-muted); }
+.ecv-frame { display: grid; gap: var(--space-4); }
+.ecv-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.ecv-section-head h3 { margin: 0; font: 500 13px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.ecv-pager { gap: var(--space-2); flex-wrap: nowrap; }
+.ecv-pager .eg-chip--lg { white-space: nowrap; }
+.ecv-today-badge { height: 20px; padding: 0 8px; }
+.ecv-disabled { opacity: .4; pointer-events: none; }
+.ecv-client-select .eg-field { flex-direction: row; align-items: center; gap: var(--space-2); }
+.ecv-client-select .eg-field__label { margin: 0; }
+.ecv-client-select select { min-width: 200px; }
+
+/* ---------------------------------------------------------------- plant strip */
+.ecv-plants { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-4); }
+.ecv-plants .eg-plant { text-decoration: none; color: inherit; }
+
+/* ---------------------------------------------------------------- savings period form */
+.ecv-period { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.ecv-period .eg-row { gap: var(--space-2); flex-wrap: wrap; }
+.ecv-date { width: auto; }
+.ecv-date input { min-width: 140px; color-scheme: dark; }
+[data-theme="light"] .ecv-date input { color-scheme: light; }
+
+/* ---------------------------------------------------------------- widget grid (12 columns) */
+.ecv-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--space-6); align-items: stretch; }
+.ecv-grid > * { min-width: 0; display: grid; }
+.ecv-span-full { grid-column: span 12; }
+.ecv-span-wide { grid-column: span 7; }
+.ecv-span-narrow { grid-column: span 5; }
+.ecv-span-half { grid-column: span 6; }
+.ecv-span-third { grid-column: span 4; }
+@media (max-width: 1180px) {
+  .ecv-grid > [class^="ecv-span-"] { grid-column: span 12; }
+  .ecv-screen > .eg-side { position: static; height: auto; }
+}
+
+/* ---------------------------------------------------------------- cards, tiles */
+.ecv-card { padding: var(--space-6); display: grid; gap: var(--space-4); align-content: start; }
+.ecv-card .eg-card__head { margin-bottom: 0; }
+.ecv-card .eg-card__title { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.ecv-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-content: stretch; }
+.ecv-tiles--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ecv-tiles--stack { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+.ecv-tiles--stack.ecv-tiles--2col { grid-template-columns: 1fr 1fr; }
+.ecv-tiles .eg-stat__value { white-space: nowrap; }
+.ecv-kv { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); }
+.ecv-kv > div { display: grid; gap: 4px; }
+.ecv-kv span { font-size: 12px; color: var(--ink-muted); }
+.ecv-kv b { font-size: 18px; font-weight: 500; white-space: nowrap; }
+.ecv-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: var(--space-3); }
+.ecv-srcchips { gap: var(--space-2); margin-top: calc(-1 * var(--space-1)); }
+.ecv-chart-gap { margin-top: var(--space-2); }
+.ecv-ico { display: inline-flex; }
+.ecv-swatch-line { height: 3px; width: 14px; }
+.ecv-hm-scale { width: 120px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--surface-2), var(--c-iex, var(--series-iex))); }
+.ecv-footnote { margin: 0; }
+
+/* ---------------------------------------------------------------- folder content */
+.ecv-on-folder-muted { color: var(--on-folder-muted); }
+.ecv-sheet-gap { margin-top: 10px; }
+.ecv-today-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-6); align-items: center; margin: 22px 0 26px; }
+.ecv-big { font: 300 64px/64px var(--font-display); letter-spacing: -0.02em; white-space: nowrap; margin-top: var(--space-2); }
+.ecv-big span { font-size: 22px; font-weight: 400; color: var(--on-folder-muted); margin-left: 6px; letter-spacing: 0; }
+.ecv-big--money span { font-size: 32px; margin-left: 0; }
+.ecv-hero-chips { margin-top: var(--space-4); gap: var(--space-2); }
+.ecv-ring-row { display: flex; align-items: center; gap: 22px; }
+.ecv-ring-host { display: grid; }
+.ecv-mini-legend { display: grid; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--on-folder-muted); }
+.ecv-mini-legend > div { display: flex; align-items: center; gap: 8px; }
+.ecv-mini-legend b { color: var(--on-folder); font-weight: 600; margin-left: auto; padding-left: 16px; }
+.ecv-mini-legend__unit { justify-content: flex-end; font-size: 11px; }
+.ecv-sv-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin: 28px 0 30px; }
+.ecv-folder-empty { display: grid; gap: 6px; margin: 28px 0; color: var(--on-folder-muted); }
+.ecv-folder-empty b { color: var(--on-folder); font-weight: 500; font-size: 18px; }
+@media (max-width: 1480px) {
+  .ecv-big { font-size: 52px; line-height: 52px; }
+  .ecv-today-hero { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------- empty state, notice */
+.ecv-empty { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--line); }
+.ecv-empty b { font-weight: 600; }
+.ecv-empty p { margin: 4px 0 0; font-size: 13px; }
+.ecv-notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); font-size: 13px; border: 1px solid var(--line); }
+.ecv-notice--warning { background: var(--warning-soft); color: var(--ink); }
+.ecv-notice--negative { background: var(--negative-soft); color: var(--ink); }
+
+/* ---------------------------------------------------------------- table (no design-system component) */
+.ecv-table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--line); }
+.ecv-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ecv-table th, .ecv-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.ecv-table thead th { font-weight: 500; font-size: 12px; color: var(--ink-muted); background: var(--surface-2); white-space: nowrap; }
+.ecv-table tbody tr:hover { background: var(--glass); }
+.ecv-table tfoot td { font-weight: 600; border-bottom: 0; background: var(--surface-2); }
+.ecv-table .num { text-align: right; white-space: nowrap; }
+.ecv-table .num small { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 400; }
+.ecv-table .neg { color: var(--negative); }
+.ecv-table .nowrap { white-space: nowrap; }
+.ecv-link { color: var(--accent); display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.ecv-link:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------- login */
+.ecv-login { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: var(--space-4); padding: var(--space-6); }
+.ecv-login__card { width: min(440px, 92vw); padding: var(--space-10) var(--space-8); display: grid; gap: var(--space-4); }
+.ecv-login__card .eg-wordmark { font-size: 28px; }
+.ecv-login__title { margin: var(--space-2) 0 0; font: 300 30px/36px var(--font-display); letter-spacing: -0.01em; }
+.ecv-login__title em { font-style: normal; font-weight: 500; color: var(--accent); }
+.ecv-login__card > p { margin: 0; }
+.ecv-login__form { display: grid; gap: var(--space-4); margin-top: var(--space-2); }
+.ecv-login__form .eg-input input { width: 100%; }
+.ecv-login__error { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--negative-soft); color: var(--ink); font-size: 13px; }
+.ecv-login__foot { font-size: 12px; }
+
+/* ---------------------------------------------------------------- fixes from the screenshot review */
+.ecv-nowrap { white-space: nowrap; }
+.ecv-card .eg-readout__items { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ecv-table th, .ecv-table td { padding: 9px 10px; }
+.ecv-table th:first-child, .ecv-table td:first-child { padding-left: 14px; }
+.ecv-table tfoot td:first-child { white-space: nowrap; }
+.ecv-table thead th { white-space: normal; line-height: 1.3; vertical-align: bottom; }

@@ -1,0 +1,39 @@
+{
+  "name": "ergos-client-view",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "postinstall": "node scripts/copy-design-system.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "create-user": "node --experimental-strip-types scripts/create-user.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "3.0.3",
+    "ergos-harmony": "git+https://github.com/Ergplan/designsystem.git#d00bc9a67614dbec1ca51efe3443f9d044dc6253",
+    "jose": "6.2.18",
+    "next": "15.5.29",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "postcss": "8.5.23"
+  }
+}

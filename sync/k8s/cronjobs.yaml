@@ -1,0 +1,79 @@
+# Secret "ergos-view-sync" must hold ERGOS_DATABASE_URL and TARGET_DATABASE_URL
+# (optionally SYNC_WINDOW_DAYS, SYNC_STALE_MINUTES). Create it with kubectl, never commit it:
+#   kubectl create secret generic ergos-view-sync --from-env-file=sync/.env
+# Schedules are evaluated in the cluster's time zone; the minutes do not depend on it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ergos-view-sync-fast
+spec:
+  schedule: "4,19,34,49 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+          containers:
+            - name: sync
+              image: ergos-view-sync:latest   # replace with your registry image
+              args: ["--tier", "fast"]
+              envFrom: [{ secretRef: { name: ergos-view-sync } }]
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { memory: 512Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ergos-view-sync-slow
+spec:
+  schedule: "11 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+          containers:
+            - name: sync
+              image: ergos-view-sync:latest
+              args: ["--tier", "slow"]
+              envFrom: [{ secretRef: { name: ergos-view-sync } }]
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { memory: 512Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ergos-view-sync-freshness
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+          containers:
+            - name: freshness
+              image: ergos-view-sync:latest
+              args: ["--freshness"]
+              envFrom: [{ secretRef: { name: ergos-view-sync } }]
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
