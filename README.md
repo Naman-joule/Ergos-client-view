@@ -42,15 +42,19 @@ Connection strings (Supabase → Project settings → Database → Connection po
 
 The direct `db.<ref>.supabase.co` host is IPv6-only, so use the pooler hosts.
 
-## 2. Sync job
+## 2. Sync and Population job
 
 ```bash
-cd sync && cp .env.example .env    # fill in, never commit
-pip install -r requirements.txt
-python sync.py --tier slow                     # tariffs and charges (hourly)
-python sync.py --tier fast --backfill-days 40  # first load
-python sync.py --tier fast                     # every 15 minutes
-python sync.py --freshness                     # exit 1 if the last good fast run is > SYNC_STALE_MINUTES old
+# To populate data into Supabase:
+python populate.py --all                           # full historical data load
+python populate.py --days 60                       # load last 60 days of rolling data
+python populate.py --verify-only                   # check and compare table row counts
+
+# Ongoing sync jobs (also can be run from sync/):
+python sync/sync.py --tier slow                    # tariffs and charges (hourly)
+python sync/sync.py --tier fast --backfill-days 40 # first load
+python sync/sync.py --tier fast                    # every 15 minutes
+python sync/sync.py --freshness                    # exit 1 if the last good fast run is > SYNC_STALE_MINUTES old
 ```
 
 Use a **read-only** ergOS user for `ERGOS_DATABASE_URL`. Each tier runs in one target transaction (all tables or
