@@ -316,6 +316,11 @@ def run_populate(
         src.execute("SET TimeZone = 'UTC'")
         src.commit()
 
+        # ergOS stores IST wall-clock times in "timestamp without time zone" columns. Read as text, they
+        # carry no offset, so tell the target to interpret them as IST, or every reading lands 5h30m late.
+        # Columns that already carry an offset (timestamptz) are unaffected.
+        tgt.execute("SET TimeZone = 'Asia/Kolkata'")
+
         if not tgt.execute("SELECT pg_try_advisory_xact_lock(%s)", (LOCK_KEY,)).fetchone()[0]:
             log.error("Another sync or population process currently holds the lock.")
             return 1

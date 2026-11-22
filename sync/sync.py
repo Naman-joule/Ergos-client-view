@@ -245,6 +245,11 @@ def run_tier(tier: str, backfill: int | None, only: set[str] | None, dry_run: bo
             src.execute("SET TimeZone = 'UTC'")
             src.commit()
 
+            # ergOS stores IST wall-clock times in "timestamp without time zone" columns. Read as text, they
+            # carry no offset, so tell the target to interpret them as IST, or every reading lands 5h30m late.
+            # Columns that already carry an offset (timestamptz) are unaffected.
+            tgt.execute("SET TimeZone = 'Asia/Kolkata'")
+
             if not tgt.execute("SELECT pg_try_advisory_xact_lock(%s)", (LOCK_KEY,)).fetchone()[0]:
                 log.warning("another sync run holds the lock; skipping")
                 runlog.finish(run_id, "skipped", 0, "another run in progress")
