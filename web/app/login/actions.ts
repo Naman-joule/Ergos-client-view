@@ -22,23 +22,29 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
   if (!email || !password) return { error: 'Enter your email and password.', email };
   if (isLocked(email)) return { error: 'Too many attempts. Try again in 5 minutes.', email };
 
-  const rows = await anonymous((q) =>
-    q<{ id: number; password_hash: string; is_active: boolean }>('SELECT id, password_hash, is_active FROM app_auth_lookup($1)', [email]),
-  );
-  const user = rows[0];
-  const ok = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
-  if (!user || !ok || !user.is_active) {
-    recordFailure(email);
-    return generic;
-  }
-  clearFailures(email);
+  try {
+    const rows = await anonymous((q) =>
+      q<{ id: number; password_hash: string; is_active: boolean }>('SELECT id, password_hash, is_active FROM app_auth_lookup($1)', [email]),
+    );
+    const user = rows[0];
+    const ok = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
+    if (!user || !ok || !user.is_active) {
+      recordFailure(email);
+      return generic;
+    }
+    clearFailures(email);
 
-  (await cookies()).set(SESSION_COOKIE, await signSession(user.id), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_HOURS * 3600,
-  });
+    (await cookies()).set(SESSION_COOKIE, await signSession(user.id), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: SESSION_HOURS * 3600,
+    });
+  } catch (e) {
+    // Database unreachable or SESSION_SECRET missing: log the cause, show a calm message.
+    console.error('login failed:', (e as Error).message);
+    return { error: 'Sign-in is unavailable right now. Please try again in a few minutes.', email };
+  }
   redirect(next);
 }
