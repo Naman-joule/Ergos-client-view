@@ -9,18 +9,21 @@ export interface PlantRow {
 export interface Scope { clients: ClientRow[]; plants: PlantRow[] }
 export interface Selection { client: ClientRow; plant: PlantRow; plants: PlantRow[] }
 
-/** Clients and consumer plants this user can see. No user filter here: RLS does it. */
+/** Clients and consumer plants this user can see. No user filter here: RLS does it.
+ *  Plants without a client are skipped (nothing to group them under). */
 export async function loadScope(q: Query): Promise<Scope> {
   const [clients, plants] = await Promise.all([
     q<ClientRow>(`SELECT client_id, name, alias_name FROM client WHERE coalesce(is_active, true) ORDER BY name`),
     q<PlantRow>(`
       SELECT p.plant_id, p.client_id, p.name, p.state, p.discom, p.connected_load, p.voltage_level, p.is_auto_trading_enabled
-      FROM plant p JOIN plant_type t ON t.id = p.plant_type_id
-      WHERE t.type = 'consumer' AND coalesce(p.is_active, true)
-      ORDER BY p.name`),
+      FROM plant p LEFT JOIN plant_type t ON t.id = p.plant_type_id
+      -- Every plant except generators (captive solar etc.). Tolerant of case and of a missing type.
+      WHERE lower(coalesce(t.type, '')) NOT IN ('generator', 'generation')
+        AND coalesce(p.is_active, true)
+      ORDER BY p.name NULLS LAST`),
   ]);
   const withPlants = new Set(plants.map((p) => p.client_id));
-  return { clients: clients.filter((c) => withPlants.has(c.client_id)), plants };
+  return { clients: clients.filter((c) => withPlants.has(c.client_id)), plants: plants.filter((p) => p.client_id !== null) };
 }
 
 const toId = (v: unknown) => {

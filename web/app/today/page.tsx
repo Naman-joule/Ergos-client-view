@@ -1,11 +1,11 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
-import { loadToday } from '@/lib/queries/today';
+import { latestMeterDate, loadToday } from '@/lib/queries/today';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { loadSpec } from '@/lib/dashboard/load';
 import { visibleToday } from '@/lib/dashboard/registry';
-import { currentBlock, isYmd, istToday } from '@/lib/time';
+import { currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
 import { PlantStrip } from '@/components/shell/PlantStrip';
@@ -24,15 +24,22 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const today = istToday();
   const asked = one(sp.date);
-  const date = isYmd(asked) && asked <= today ? asked : today;   // no future dates
+  const explicit = isYmd(asked) && asked <= today ? asked : null;   // no future dates
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
     const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
+    // Without a date in the URL, open on today, or on the plant's latest day with readings if today has none yet.
+    let date = explicit ?? today;
+    let fellBack = false;
+    if (!explicit) {
+      const latest = await latestMeterDate(q, sel.plant.plant_id);
+      if (latest && latest < today) { date = latest; fellBack = true; }
+    }
     const [loaded, data] = await Promise.all([loadSpec(q, sel.client.client_id), loadToday(q, sel.plant.plant_id, date)]);
-    return { scope, sel, lag, loaded, data } as const;
+    return { scope, sel, lag, loaded, data, date, fellBack } as const;
   });
 
   if (!view.sel) {
@@ -42,20 +49,23 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       </Shell>
     );
   }
-  const { sel, loaded, data } = view;
+  const { sel, loaded, data, date, fellBack } = view;
   const widgets = visibleToday(loaded.spec, user.permissions);
-  const link = (o: { plant?: number; date?: string }) =>
-    href('/today', { client: sel.client.client_id, plant: o.plant ?? sel.plant.plant_id, date: (o.date ?? date) === today ? null : o.date ?? date });
+  const link = (o: { plant?: number; date?: string }) => {
+    const d = o.date ?? explicit;          // switching plant keeps only a date the user picked
+    return href('/today', { client: sel.client.client_id, plant: o.plant ?? sel.plant.plant_id, date: d && d !== today ? d : null });
+  };
 
   return (
     <Shell user={user} page="today" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
       {loaded.error && user.permissions.has('manage_dashboards') ? <Notice>{loaded.error}</Notice> : null}
+      {fellBack ? <Notice>No readings for today yet for {sel.plant.name}. Showing the latest day with data, {formatDateLong(date)}.</Notice> : null}
       <div className="ecv-frame">
         <div className="ecv-section-head">
           <h3><Icon name="factory" size={18} />{sel.client.name} <span className="eg-chip eg-chip--solid">{sel.plants.length} plant{sel.plants.length === 1 ? '' : 's'}</span></h3>
           <div className="eg-row">
             {view.scope.clients.length > 1 ? (
-              <ClientSelect clients={view.scope.clients} current={sel.client.client_id} path="/today" keep={date === today ? {} : { date }} />
+              <ClientSelect clients={view.scope.clients} current={sel.client.client_id} path="/today" keep={explicit && explicit !== today ? { date: explicit } : {}} />
             ) : null}
             <DayPager date={date} today={today} hrefFor={(d) => link({ date: d })} />
           </div>

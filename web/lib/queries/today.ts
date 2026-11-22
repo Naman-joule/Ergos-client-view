@@ -21,6 +21,13 @@ const BLOCK_SQL = `
   FROM m WHERE t::date = $2::date
   GROUP BY 1, 2`;
 
+/** Latest IST calendar day with meter readings for the plant, or null when it has none. */
+export async function latestMeterDate(q: Query, plantId: number): Promise<string | null> {
+  const rows = await q<{ d: string | null }>(
+    `SELECT max(date)::text AS d FROM plant_processed_meter_data WHERE plant_id = $1`, [plantId]);
+  return rows[0]?.d ?? null;
+}
+
 export interface TodayData {
   date: string;
   isToday: boolean;
