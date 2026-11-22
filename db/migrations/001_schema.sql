@@ -133,9 +133,9 @@ CREATE TABLE market_types (
   id           integer PRIMARY KEY,
   market_id    integer REFERENCES markets (id),
   name         varchar(50),        -- DAM, GDAM, RTM
-  start_time   time,
-  end_time     time,
-  result_time  time
+  start_time   varchar(50),
+  end_time     varchar(50),
+  result_time  varchar(50)
 );
 
 CREATE TABLE plant_gen_con_mapping (

@@ -23,10 +23,22 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from dotenv import find_dotenv, load_dotenv
 import psycopg
 from psycopg import sql
+
+# Ensure sync directory is in sys.path
+sync_dir = Path(__file__).resolve().parent
+if str(sync_dir) not in sys.path:
+    sys.path.insert(0, str(sync_dir))
+
+# Load .env file from current directory, sync directory, or project root
+load_dotenv(find_dotenv(usecwd=True))
+load_dotenv(sync_dir / ".env")
+load_dotenv(sync_dir.parent / ".env")
 
 from tables import BY_NAME, TABLES, Table
 
