@@ -16,9 +16,6 @@
 .ecv-client-select .eg-field__label { margin: 0; }
 .ecv-client-select select { min-width: 200px; }
 
-/* ---------------------------------------------------------------- plant strip */
-.ecv-plants { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-4); }
-.ecv-plants .eg-plant { text-decoration: none; color: inherit; }
 
 /* ---------------------------------------------------------------- savings period form */
 .ecv-period { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
@@ -159,17 +156,6 @@
 .ecv-option__check { display: inline-flex; color: var(--accent); }
 .ecv-options__empty { padding: var(--space-3); font-size: 13px; color: var(--ink-muted); }
 
-.ecv-plantpicker { display: grid; gap: var(--space-3); }
-.ecv-plantpicker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; min-height: 36px; }
-.ecv-plantpicker__head .eg-overline { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
-.ecv-count { height: 20px; padding: 0 8px; }
-.ecv-plantpicker__search { width: min(320px, 100%); }
-.ecv-plants { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
-.ecv-plant__titles { display: grid; min-width: 0; }
-.ecv-plant__titles .eg-plant__name { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; overflow-wrap: anywhere; }
-.ecv-plants .eg-plant__head { align-items: flex-start; }
-.ecv-plants .eg-plant__radio { margin-top: 2px; }
-.ecv-plants__empty { margin: 0; font-size: 13px; }
 @media (max-width: 760px) {
   .ecv-client { min-width: 0; width: 100%; max-width: none; }
   .ecv-switcher { width: 100%; }
@@ -219,28 +205,48 @@
 .ecv-logo--lg { width: 44px; height: 44px; border-radius: var(--radius-sm); }
 .ecv-logo--sm { width: 32px; height: 32px; border-radius: var(--radius-xs); }
 
-/* ---------------------------------------------------------------- many plants: filters, groups, compact tiles */
-.ecv-pills button { height: 32px; padding: 0 14px; font-size: 13px; }
+
+/* ---------------------------------------------------------------- compact scope: client + plant switchers in one row */
+.ecv-scope { padding: var(--space-4) var(--space-5); gap: var(--space-3); }
+.ecv-scope__pick { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-width: 0; }
+.ecv-plantsw { position: relative; min-width: 0; }
+.ecv-plantsw__row { display: flex; align-items: center; gap: var(--space-2); }
+.ecv-plantsw__button { min-width: 300px; max-width: 440px; padding-right: var(--space-5); color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: background .15s ease, border-color .15s ease; }
+.ecv-plantsw__button:hover, .ecv-plantsw__button[aria-expanded="true"] { background: var(--glass-strong); border-color: var(--line-strong); }
+.ecv-plantsw__button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ecv-plantsw__button[aria-expanded="true"] .ecv-chev { transform: rotate(180deg); }
+.ecv-plantsw__icon { width: 44px; height: 44px; border-radius: var(--radius-sm); }
+.ecv-plantsw__meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.ecv-plantsw__meta .eg-dot { display: inline-block; vertical-align: middle; }
+.ecv-plantsw__step { display: inline-flex; gap: var(--space-1); }
+.ecv-popover--plants { width: min(560px, 92vw); }
+.ecv-popover--plants .ecv-pills { padding: 0 var(--space-1); }
+.ecv-options--plants { max-height: 420px; }
+.ecv-options__group { display: flex; align-items: center; gap: 6px; padding: var(--space-2) var(--space-3) 4px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-muted); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.ecv-options__group span:last-child { font-weight: 400; opacity: .7; }
+.ecv-options__items { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ecv-option--plant { grid-template-columns: auto minmax(0, 1fr) auto auto; display: grid; }
+.ecv-option__icon { width: 32px; height: 32px; border-radius: 10px; }
+.ecv-option__cap { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.ecv-option__cap .eg-ico { color: var(--accent); width: 13px; height: 13px; }
+.ecv-option__cap small { font-size: 11px; font-weight: 400; color: var(--ink-muted); margin-left: 4px; }
+.ecv-option__check { width: 18px; display: inline-flex; justify-content: center; color: var(--accent); }
+.ecv-options [aria-selected="true"] .ecv-option--plant { background: var(--accent-soft); }
+@media (max-width: 760px) {
+  .ecv-scope__pick, .ecv-plantsw, .ecv-plantsw__row { width: 100%; }
+  .ecv-plantsw__button { min-width: 0; flex: 1; max-width: none; }
+}
+.ecv-pills button { height: 30px; padding: 0 12px; font-size: 12px; }
 .ecv-pills__n { opacity: .6; margin-left: 4px; font-variant-numeric: tabular-nums; }
-.ecv-plantpicker__head .ecv-pills { flex: 1; justify-content: flex-start; }
-.ecv-plantgroup { display: grid; gap: var(--space-2); }
-.ecv-plantgroup__title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: .06em; }
-.ecv-plantgroup__title span:last-child { font-weight: 400; opacity: .7; }
-.ecv-ptiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-3); }
-.ecv-ptile { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); padding: 12px 14px; text-decoration: none; }
-.ecv-ptile:hover { transform: translateY(-1px); }
-.ecv-ptile__icon { width: 34px; height: 34px; border-radius: 10px; }
-.ecv-ptile__body { display: grid; gap: 4px; min-width: 0; }
-.ecv-ptile__name { font-size: 14px; line-height: 18px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.ecv-ptile__meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); white-space: nowrap; }
-.ecv-ptile__dot { opacity: .5; }
-.ecv-ptile__cap { display: inline-flex; align-items: center; gap: 3px; color: var(--ink); font-weight: 500; }
-.ecv-ptile__cap .eg-ico { width: 13px; height: 13px; color: var(--accent); }
-.ecv-ptile__auto { display: inline-flex; align-items: center; gap: 4px; }
-.ecv-ptile__loc { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ecv-ptile__loc .eg-ico { width: 12px; height: 12px; flex: none; }
-.ecv-ptile .eg-plant__radio { margin-left: 0; width: 20px; height: 20px; margin-top: 2px; }
-.eg-plant.is-selected .ecv-ptile__meta, .eg-plant.is-selected .ecv-ptile__loc { color: var(--on-folder-muted); }
-.eg-plant.is-selected .ecv-ptile__cap { color: var(--on-folder); }
-.eg-plant.is-selected .ecv-ptile__cap .eg-ico { color: var(--harmony); }
-.ecv-showall { justify-self: start; }
+/* one row at desktop widths: switchers size to their content */
+.ecv-scope .ecv-client { min-width: 0; max-width: 320px; }
+.ecv-plantsw__button { min-width: 0; max-width: 380px; }
+.ecv-scope__top { flex-wrap: nowrap; }
+.ecv-scope__pick { flex-wrap: nowrap; flex: 1 1 auto; }
+.ecv-scope__controls { flex: none; }
+.ecv-option--plant { padding-top: 6px; padding-bottom: 6px; }
+@media (max-width: 1180px) {
+  .ecv-scope__top, .ecv-scope__pick { flex-wrap: wrap; }
+}

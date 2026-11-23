@@ -4,7 +4,7 @@ import { inr } from '@/lib/format';
 import { iconSvg } from '@/lib/ui/icon-svg';
 import { resolveLogoUrl } from '@/lib/logo';
 import { ClientSwitcher, type ClientOption } from './ClientSwitcher';
-import { PlantGrid, type PlantOption } from './PlantGrid';
+import { PlantSwitcher, type PlantOption } from './PlantSwitcher';
 
 function initials(name: string): string {
   const words = name.replace(/\b(ltd|limited|pvt|private|inc|llp)\b\.?/gi, '').split(/\s+/).filter(Boolean);
@@ -45,12 +45,15 @@ export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls
   return (
     <section className="eg-glass ecv-scope" aria-label="Client and plant">
       <div className="ecv-scope__top">
-        <ClientSwitcher clients={clients} currentId={client.client_id}
-          icons={{ chevron: icon('chevron-down', 16), check: icon('check', 16), search: icon('search', 16) }} />
+        <div className="ecv-scope__pick">
+          <ClientSwitcher clients={clients} currentId={client.client_id}
+            icons={{ chevron: icon('chevron-down', 16), check: icon('check', 16), search: icon('search', 16) }} />
+          <PlantSwitcher plants={plants} selectedId={plant.plant_id}
+            icons={{ factory: icon('factory', 18), pin: icon('pin', 12), check: icon('check', 16), bolt: icon('bolt', 13), search: icon('search', 16),
+                     chevron: icon('chevron-down', 16), left: icon('chevron-left', 18), right: icon('chevron-right', 18) }} />
+        </div>
         {controls ? <div className="ecv-scope__controls">{controls}</div> : null}
       </div>
-      <PlantGrid plants={plants} selectedId={plant.plant_id}
-        icons={{ factory: icon('factory', 20), pin: icon('pin', 13), check: icon('check', 14), bolt: icon('bolt', 16), trend: icon('trend', 14), search: icon('search', 16) }} />
       {below}
     </section>
   );
