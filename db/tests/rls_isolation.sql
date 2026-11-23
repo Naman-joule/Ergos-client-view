@@ -53,6 +53,10 @@ DO $$ BEGIN
 EXCEPTION WHEN insufficient_privilege THEN PERFORM pg_temp.chk(true, 'films: cannot write synced tables');
 END $$;
 
+-- statements without plant_id (ergOS doesn't always fill it): matched by portfolio, never across tenants
+SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE portfolio_id IN ('DEMO-PF-K1', 'DEMO-PF-K2')) = 0,
+                   'films: sees no cement statements, with or without plant_id');
+
 -- ---------------------------------------------------------------- single-plant user (900005)
 SELECT set_config('app.user_id', '900005', false);
 SELECT pg_temp.chk((SELECT count(*) FROM plant p JOIN plant_type t ON t.id = p.plant_type_id WHERE t.type = 'consumer') = 1,
@@ -61,10 +65,15 @@ SELECT pg_temp.chk((SELECT plant_id FROM plant) = 900002, 'single-plant: the pla
 SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data WHERE plant_id IN (900001, 900005)) = 0, 'single-plant: sees no K1 or solar meter data');
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE plant_id <> 900002) = 0, 'single-plant: sees only K2 savings');
 
+SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE portfolio_id = 'DEMO-PF-K1') = 0,
+                   'single-plant: sees no K1 statements, with or without plant_id');
+
 -- ---------------------------------------------------------------- cement user (900003): solar through the consumer
 SELECT set_config('app.user_id', '900003', false);
 SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data WHERE plant_id = 900005) > 0, 'cement: sees mapped solar meter data');
 SELECT pg_temp.chk((SELECT count(*) FROM plant WHERE client_id = 900002) = 0, 'cement: sees no films plants');
+SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE portfolio_id = 'DEMO-PF-K1') > 0,
+                   'cement: sees K1 statements (plant_id filled or matched by portfolio)');
 
 -- ---------------------------------------------------------------- manager (900002): may write config for an accessible client
 SELECT set_config('app.user_id', '900002', false);

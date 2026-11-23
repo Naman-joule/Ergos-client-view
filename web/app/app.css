@@ -124,3 +124,54 @@
 .ecv-table th:first-child, .ecv-table td:first-child { padding-left: 14px; }
 .ecv-table tfoot td:first-child { white-space: nowrap; }
 .ecv-table thead th { white-space: normal; line-height: 1.3; vertical-align: bottom; }
+
+/* ---------------------------------------------------------------- scope: client switcher + plant grid */
+.ecv-scope { padding: var(--space-5) var(--space-6) var(--space-6); display: grid; gap: var(--space-5); position: relative; z-index: 5; }
+.ecv-scope__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.ecv-scope__controls { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-left: auto; }
+.ecv-scope .ecv-period { justify-content: flex-end; }
+
+.ecv-switcher { position: relative; }
+.ecv-client { min-width: 280px; max-width: 420px; padding-right: var(--space-5); color: inherit; font: inherit; text-align: left; }
+.ecv-client--button { cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.ecv-client--button:hover, .ecv-client--button[aria-expanded="true"] { background: var(--glass-strong); border-color: var(--line-strong); }
+.ecv-client--button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ecv-client-avatar { background: var(--accent-soft); color: var(--accent); border: 0; font-weight: 600; flex: none; }
+.ecv-client-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ecv-client-text .eg-account__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecv-client-label { font-size: 10px; color: var(--ink-muted); }
+.ecv-chev { display: inline-flex; color: var(--ink-muted); transition: transform .15s ease; }
+.ecv-client--button[aria-expanded="true"] .ecv-chev { transform: rotate(180deg); }
+
+.ecv-popover { position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 50; width: max(100%, 340px);
+  padding: var(--space-2); border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-float); display: grid; gap: var(--space-2); }
+.ecv-popover__search { margin: var(--space-1); }
+.ecv-options { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; display: grid; gap: 2px; }
+.ecv-option { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
+  color: inherit; text-decoration: none; }
+.ecv-option.is-active, .ecv-option:hover { background: var(--surface-2); }
+.ecv-options [aria-selected="true"] .ecv-option b { color: var(--accent); }
+.ecv-option .eg-avatar { flex: none; }
+.ecv-option__text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ecv-option__text b { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecv-option__text small { font-size: 12px; color: var(--ink-muted); }
+.ecv-option__check { display: inline-flex; color: var(--accent); }
+.ecv-options__empty { padding: var(--space-3); font-size: 13px; color: var(--ink-muted); }
+
+.ecv-plantpicker { display: grid; gap: var(--space-3); }
+.ecv-plantpicker__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; min-height: 36px; }
+.ecv-plantpicker__head .eg-overline { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-muted); }
+.ecv-count { height: 20px; padding: 0 8px; }
+.ecv-plantpicker__search { width: min(320px, 100%); }
+.ecv-plants { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.ecv-plant__titles { display: grid; min-width: 0; }
+.ecv-plant__titles .eg-plant__name { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; overflow-wrap: anywhere; }
+.ecv-plants .eg-plant__head { align-items: flex-start; }
+.ecv-plants .eg-plant__radio { margin-top: 2px; }
+.ecv-plants__empty { margin: 0; font-size: 13px; }
+@media (max-width: 760px) {
+  .ecv-client { min-width: 0; width: 100%; max-width: none; }
+  .ecv-switcher { width: 100%; }
+  .ecv-scope__controls { margin-left: 0; }
+}

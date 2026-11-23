@@ -4,18 +4,18 @@ import { addDays, daysBetween, formatWeekday, isYmd, istToday, monthStart } from
 
 // ---------------------------------------------------------------------------- period
 export type Preset = 'this_month' | 'last_month' | 'last_30';
-export interface Period { from: string; to: string; preset: Preset | null; clamped: boolean }
+export interface Period { from: string; to: string; preset: Preset | null; clamped: boolean; explicit: boolean }
 
 export function resolvePeriod(p: { from?: unknown; to?: unknown; preset?: unknown }, today = istToday()): Period {
   const yesterday = addDays(today, -1);
   const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);
   const preset = one(p.preset);
-  if (preset === 'this_month') return { from: monthStart(yesterday), to: yesterday, preset, clamped: false };
+  if (preset === 'this_month') return { from: monthStart(yesterday), to: yesterday, preset, clamped: false, explicit: true };
   if (preset === 'last_month') {
     const lastMonthEnd = addDays(monthStart(today), -1);
-    return { from: monthStart(lastMonthEnd), to: lastMonthEnd, preset, clamped: false };
+    return { from: monthStart(lastMonthEnd), to: lastMonthEnd, preset, clamped: false, explicit: true };
   }
-  if (preset === 'last_30') return { from: addDays(today, -30), to: yesterday, preset, clamped: false };
+  if (preset === 'last_30') return { from: addDays(today, -30), to: yesterday, preset, clamped: false, explicit: true };
 
   let from = isYmd(one(p.from)) ? (one(p.from) as string) : monthStart(yesterday);
   let to = isYmd(one(p.to)) ? (one(p.to) as string) : yesterday;
@@ -23,7 +23,12 @@ export function resolvePeriod(p: { from?: unknown; to?: unknown; preset?: unknow
   if (from > to) [from, to] = [to, from];
   let clamped = false;
   if (daysBetween(from, to) > 365) { from = addDays(to, -365); clamped = true; }   // 366 days inclusive
-  return { from, to, preset: null, clamped };
+  return { from, to, preset: null, clamped, explicit: isYmd(one(p.from)) || isYmd(one(p.to)) };
+}
+
+/** The month of `latest`, up to that day: used when the default period has no statements. */
+export function periodEndingAt(latest: string): Period {
+  return { from: monthStart(latest), to: latest, preset: null, clamped: false, explicit: false };
 }
 
 // ---------------------------------------------------------------------------- data
@@ -64,6 +69,27 @@ export interface HeatRow { label: string; date: string; values: number[] }
 
 export interface SavingsData { rows: SavingsRow[]; totals: SavingsTotals; tod: TodSplitRow[]; heat: HeatRow[] }
 
+/**
+ * Daily statements that belong to plant $1 (name $2). ergOS doesn't always fill plant_id on
+ * iex_tod_daily_obligation, so a statement with no plant_id also counts when its portfolio is the
+ * plant's (from its cleared trades or open access charges) or its plant_name is the plant's name.
+ */
+const STATEMENT_OF_PLANT = `(
+  o.plant_id = $1
+  OR (o.plant_id IS NULL AND (
+       o.portfolio_id IN (SELECT DISTINCT b.portfolio_id FROM trading_result_block b WHERE b.plant_id = $1 AND b.portfolio_id IS NOT NULL)
+    OR o.portfolio_id IN (SELECT c.portfolio_id FROM plant_open_access_charges c WHERE c.plant_id = $1)
+    OR lower(trim(o.plant_name)) = lower(trim($2::text))
+  ))
+)`;
+
+/** Latest trade date with a statement for the plant, or null when it has none at all. */
+export async function latestStatementDate(q: Query, plantId: number, plantName: string): Promise<string | null> {
+  const rows = await q<{ d: string | null }>(
+    `SELECT max(o.trade_date)::text AS d FROM iex_tod_daily_obligation o WHERE ${STATEMENT_OF_PLANT}`, [plantId, plantName]);
+  return rows[0]?.d ?? null;
+}
+
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 export function totalsOf(rows: SavingsRow[]): SavingsTotals {
@@ -89,17 +115,18 @@ export function totalsOf(rows: SavingsRow[]): SavingsTotals {
   };
 }
 
-export async function loadSavings(q: Query, plantId: number, period: Period, profileDays: number | null): Promise<SavingsData> {
+export async function loadSavings(q: Query, plantId: number, plantName: string, period: Period, profileDays: number | null): Promise<SavingsData> {
   const [rows, tod, heatRaw] = await Promise.all([
     q<SavingsRow>(`
-      SELECT trade_date, volume_cleared_kwh, iex_energy_charge, iex_total_cost, avg_landed_iex_tariff,
-             ctu_transmission_charges, stu_transmission_charges, distribution_charges, nldc_application_fees,
-             nldc_scheduling_buy, sldc_scheduling_charges, fees, igst, css,
-             grid_total_cost, avg_grid_tariff, electricity_duty_amount, net_savings_per_day, percent_below_grid,
-             excel_file_path, statement_docx_path, pdf_report_path, zip_bundle_path, coalesce(is_locked, false) AS is_locked
-      FROM iex_tod_daily_obligation
-      WHERE plant_id = $1 AND trade_date BETWEEN $2::date AND $3::date
-      ORDER BY trade_date`, [plantId, period.from, period.to]),
+      SELECT DISTINCT ON (o.trade_date)
+             o.trade_date, o.volume_cleared_kwh, o.iex_energy_charge, o.iex_total_cost, o.avg_landed_iex_tariff,
+             o.ctu_transmission_charges, o.stu_transmission_charges, o.distribution_charges, o.nldc_application_fees,
+             o.nldc_scheduling_buy, o.sldc_scheduling_charges, o.fees, o.igst, o.css,
+             o.grid_total_cost, o.avg_grid_tariff, o.electricity_duty_amount, o.net_savings_per_day, o.percent_below_grid,
+             o.excel_file_path, o.statement_docx_path, o.pdf_report_path, o.zip_bundle_path, coalesce(o.is_locked, false) AS is_locked
+      FROM iex_tod_daily_obligation o
+      WHERE ${STATEMENT_OF_PLANT} AND o.trade_date BETWEEN $3::date AND $4::date
+      ORDER BY o.trade_date, (o.plant_id IS NULL), o.id DESC`, [plantId, plantName, period.from, period.to]),
     // Indicative ToD split: cleared blocks priced at the DISCOM ToD tariff for the plant's voltage level + FPPCA.
     q<TodSplitRow>(`
       SELECT t.tod_type,

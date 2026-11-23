@@ -8,13 +8,11 @@ import { visibleToday } from '@/lib/dashboard/registry';
 import { currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
-import { PlantStrip } from '@/components/shell/PlantStrip';
 import { DayPager } from '@/components/shell/DayPager';
-import { ClientSelect } from '@/components/shell/ClientSelect';
+import { ScopeBar } from '@/components/shell/ScopeBar';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { TodayWidgetView } from '@/components/widgets/today/TodayWidgets';
 import { Empty, Notice } from '@/components/ui/Empty';
-import { Icon } from '@/components/ui/Icon';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Today' };
@@ -60,18 +58,10 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     <Shell user={user} page="today" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
       {loaded.error && user.permissions.has('manage_dashboards') ? <Notice>{loaded.error}</Notice> : null}
       {fellBack ? <Notice>No readings for today yet for {sel.plant.name}. Showing the latest day with data, {formatDateLong(date)}.</Notice> : null}
-      <div className="ecv-frame">
-        <div className="ecv-section-head">
-          <h3><Icon name="factory" size={18} />{sel.client.name} <span className="eg-chip eg-chip--solid">{sel.plants.length} plant{sel.plants.length === 1 ? '' : 's'}</span></h3>
-          <div className="eg-row">
-            {view.scope.clients.length > 1 ? (
-              <ClientSelect clients={view.scope.clients} current={sel.client.client_id} path="/today" keep={explicit && explicit !== today ? { date: explicit } : {}} />
-            ) : null}
-            <DayPager date={date} today={today} hrefFor={(d) => link({ date: d })} />
-          </div>
-        </div>
-        <PlantStrip plants={sel.plants} selected={sel.plant.plant_id} hrefFor={(p) => link({ plant: p.plant_id })} />
-      </div>
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+        clientHref={(c) => href('/today', { client: c.client_id, date: explicit && explicit !== today ? explicit : null })}
+        plantHref={(p) => link({ plant: p.plant_id })}
+        controls={<DayPager date={date} today={today} hrefFor={(d) => link({ date: d })} />} />
       {widgets.length ? (
         <WidgetGrid palette={loaded.spec.theme.palette}>
           {widgets.map((w) => (
