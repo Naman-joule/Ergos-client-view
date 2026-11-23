@@ -1,18 +1,19 @@
-// Group a day's 96 blocks by DISCOM ToD period (Off-peak / Normal / Peak) and total each
-// source's energy per period. Pure: used by the ToD view and the node:test suite.
+// A day's 96 blocks split into contiguous DISCOM ToD runs (e.g. Off-peak 00:00–05:00, Normal
+// 05:00–11:00, …, Off-peak 23:00–24:00), with each source's energy and cost per run.
+// Pure: used by the ToD view and the node:test suite.
 import { blockEnd, blockStart } from './time.ts';
 
-export interface TodLayer { key: string; slot: string; label: string; values: number[]; hatch?: boolean }
+export interface TodLayer { key: string; slot: string; label: string; values: number[]; hatch?: boolean }   // kW per block
 export interface TodInput {
-  tod: (string | null)[]; now: number; demand: number[]; layers: TodLayer[];   // layers bottom-up, kW per block
-  iexKw: number[]; iexRate: (number | null)[]; gridRate: (number | null)[];
+  tod: (string | null)[]; now: number; demand: number[];
+  layers: TodLayer[];                  // bottom-up; keys used for pricing: 'iex', 'solar', 'bank', 'grid', 'surplus'
+  iexRate: (number | null)[]; gridRate: (number | null)[]; solarRate?: (number | null)[];
 }
 
-const ORDER = ['OFFPEAK', 'NORMAL', 'PEAK'];
 const NAME: Record<string, string> = { OFFPEAK: 'Off-peak', NORMAL: 'Normal', PEAK: 'Peak' };
-const name = (k: string) => NAME[k] ?? k.charAt(0) + k.slice(1).toLowerCase();
+export const todName = (k: string) => NAME[k] ?? k.charAt(0) + k.slice(1).toLowerCase();
 
-/** Contiguous block runs as "00:00–06:00, 22:00–24:00". */
+/** Contiguous block runs as "00:00–06:00, 22:00–24:00" (blocks are 1-based). */
 export function ranges(blocks: number[]): string {
   const out: string[] = [];
   let s = -1, p = -1;
@@ -25,27 +26,67 @@ export function ranges(blocks: number[]): string {
   return out.join(', ');
 }
 
-export function todPeriods({ tod, now, demand, layers, iexKw, iexRate, gridRate }: TodInput) {
-  const keys = [...new Set(tod.filter((t): t is string => !!t))].sort(
-    (a, b) => (ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99));
-  return keys.map((k) => {
-    const all: number[] = [];
+export interface TodRun { key: string; start: number; end: number }        // 0-based block indexes, inclusive
+
+/** Contiguous runs of the same ToD period. Blocks with no period are skipped. */
+export function todRuns(tod: (string | null)[]): TodRun[] {
+  const runs: TodRun[] = [];
+  tod.forEach((t, i) => {
+    if (!t) return;
+    const last = runs[runs.length - 1];
+    if (last && last.key === t && last.end === i - 1) last.end = i;
+    else runs.push({ key: t, start: i, end: i });
+  });
+  return runs;
+}
+
+export interface RunPart { key: string; slot: string; label: string; hatch?: boolean; mwh: number; rate: number | null; cost: number | null }
+export interface RunStats extends TodRun {
+  label: string; hours: number; blocks: number; blocksDone: number; from: string; to: string;
+  demand: number; parts: RunPart[];              // MWh up to now
+  supply: number; cost: number; pricedMwh: number; avgPrice: number | null;
+  balance: { kind: 'balanced' | 'excess' | 'short' | 'none'; mwh: number };
+  future: boolean;                                // the run hasn't started yet
+}
+
+/** Energy (MWh), rates and cost per run, counting only blocks up to `now`. */
+export function runStats(input: TodInput): RunStats[] {
+  const { tod, now, demand, layers, iexRate, gridRate, solarRate } = input;
+  return todRuns(tod).map((run) => {
     const done: number[] = [];
-    tod.forEach((t, i) => { if (t === k) { all.push(i + 1); if (i <= now) done.push(i); } });
+    for (let i = run.start; i <= Math.min(run.end, now); i++) done.push(i);
     const mwh = (a: number[]) => done.reduce((s, i) => s + (a[i] || 0), 0) / 4 / 1000;
-    let iexKwh = 0, iexRs = 0, rateSum = 0, rateN = 0;
-    for (const i of done) {
-      const kwh = (iexKw[i] || 0) / 4;
-      if (kwh && iexRate[i] != null) { iexKwh += kwh; iexRs += kwh * (iexRate[i] as number); }
-    }
-    for (const b of all) { const r = gridRate[b - 1]; if (r != null) { rateSum += r; rateN++; } }
+    const rateOf = (key: string): (number | null)[] | null =>
+      key === 'iex' ? iexRate : key === 'grid' ? gridRate : key === 'solar' ? solarRate ?? null : null;
+
+    const parts: RunPart[] = layers.map((l) => {
+      const rates = rateOf(l.key);
+      let cost: number | null = null, pricedKwh = 0;
+      if (rates) {
+        for (const i of done) {
+          const kwh = (l.values[i] || 0) / 4;
+          const r = rates[i];
+          if (kwh > 0 && r != null) { cost = (cost ?? 0) + kwh * r; pricedKwh += kwh; }
+        }
+      }
+      return { key: l.key, slot: l.slot, label: l.label, hatch: l.hatch, mwh: mwh(l.values), rate: pricedKwh ? (cost as number) / pricedKwh : null, cost };
+    });
+
+    const supply = parts.filter((p) => p.key !== 'surplus').reduce((s, p) => s + p.mwh, 0);
+    const cost = parts.reduce((s, p) => s + (p.cost ?? 0), 0);
+    const pricedMwh = parts.reduce((s, p) => s + (p.cost != null && p.rate ? p.cost / p.rate / 1000 : 0), 0);
+    const d = mwh(demand);
+    const gap = supply - d;
+    const balance: RunStats['balance'] = !done.length ? { kind: 'none', mwh: 0 }
+      : Math.abs(gap) <= Math.max(0.001, d * 0.01) ? { kind: 'balanced', mwh: 0 }
+      : gap > 0 ? { kind: 'excess', mwh: gap } : { kind: 'short', mwh: -gap };
+
+    const blocks = run.end - run.start + 1;
     return {
-      key: k, label: name(k), hours: ranges(all), blocks: all.length, blocksDone: done.length,
-      demand: mwh(demand),
-      parts: layers.map((l) => ({ ...l, mwh: mwh(l.values) })),
-      iexRate: iexKwh ? iexRs / iexKwh : null,
-      gridRate: rateN ? rateSum / rateN : null,
+      ...run, label: todName(run.key), blocks, hours: blocks / 4, blocksDone: done.length,
+      from: blockStart(run.start + 1), to: blockEnd(run.end + 1),
+      demand: d, parts, supply, cost, pricedMwh, avgPrice: pricedMwh ? cost / (pricedMwh * 1000) : null,
+      balance, future: run.start > now,
     };
   });
 }
-

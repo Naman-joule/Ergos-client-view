@@ -4,7 +4,7 @@ import type { AreaHoverRow, AreaSeries, SeriesKey } from '@/lib/ui/ergos';
 import { inr } from '@/lib/format';
 import { blockEnd } from '@/lib/time';
 import { useErgosDraw } from './useErgos';
-import { TodView } from './TodView';
+import { TodView, type TodSourceInfo } from './TodView';
 
 // Layers bottom-up: IEX settles first, then solar, then banking; the grid covers the rest and
 // surplus solar sits above demand. Chart keys are design-system series slots; app.css maps colours:
@@ -22,7 +22,8 @@ const META: Record<Src, { key: SeriesKey; label: string; icon: string }> = {
 export interface SupplyProps {
   demand: number[]; solarUsed: number[]; bank: number[]; iex: number[]; iexUsed: number[]; grid: number[]; surplus: number[];
   iexRate: (number | null)[]; now: number; dayLabel: string;
-  tod: (string | null)[]; gridRate: (number | null)[];
+  tod: (string | null)[]; gridRate: (number | null)[]; solarRate: (number | null)[];
+  todSource: TodSourceInfo | null; date: string; isToday: boolean;
   /** Pre-rendered icon SVG markup by name (server-generated), so the client bundle carries no icon map. */
   icons: Record<string, string>;
 }
@@ -31,7 +32,7 @@ function Ico({ svg }: { svg: string }) {
   return <span className="ecv-ico" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surplus, iexRate, now, dayLabel, icons, tod, gridRate }: SupplyProps) {
+export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surplus, iexRate, now, dayLabel, icons, tod, gridRate, solarRate, todSource, date, isToday }: SupplyProps) {
   const [view, setView] = useState<'timeline' | 'tod'>('timeline');
   // IEX is drawn in full (the whole purchase), so where it exceeds demand the purple rises above the
   // demand line. Solar, banking and grid fill whatever demand IEX left; surplus solar sits on top.
@@ -87,8 +88,9 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
           </div>
           {seg}
         </div>
-        <TodView dayLabel={dayLabel} tod={tod} now={now} demand={demand} iexKw={iex} iexRate={iexRate} gridRate={gridRate}
-          layers={sources.map((s) => ({ key: s, slot: META[s].key, label: META[s].label, values: values[s], hatch: s === 'surplus' }))} />
+        <TodView dayLabel={dayLabel} date={date} isToday={isToday} source={todSource} tod={tod} now={now} demand={demand}
+          iexRate={iexRate} gridRate={gridRate} solarRate={solarRate}
+          layers={ORDER.filter((s) => values[s]).map((s) => ({ key: s, slot: META[s].key, label: META[s].label, values: values[s], hatch: s === 'surplus' }))} />
       </>
     );
   }

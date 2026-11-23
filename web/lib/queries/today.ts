@@ -40,6 +40,8 @@ export interface TodayData {
   iexUsed: number[];               // kW of the IEX purchase that met demand (settles first)
   tod: (string | null)[];          // DISCOM ToD period per block: PEAK / NORMAL / OFFPEAK (null when no tariff)
   gridRate: (number | null)[];     // DISCOM ₹/kWh per block for the plant's voltage level, incl. FPPCA
+  solarRate: (number | null)[];    // solar ₹/kWh per block (state_grid_solar_tariff), when known
+  todSource: TodSource | null;     // where the ToD schedule came from (fallbacks), null when none
   iex: number[];                   // kW per block (BUY)
   grid: number[];                  // kW per block, derived: whatever demand solar, banking and IEX didn't meet
   iexRate: (number | null)[];      // landed ₹/kWh per block
@@ -60,6 +62,37 @@ export interface BankingRow {
 export interface HistoryDay { date: string; demandMwh: number; peakKw: number; iexMwh: number; landedRate: number | null }
 
 const zeros = () => new Array<number>(96).fill(0);
+
+export interface TodSource { kind: 'plant' | 'discom_category' | 'discom' | 'state'; year: number; month: number }
+interface TodRow { block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null; source: string; src_year: number; src_month: number }
+
+function perBlock<T>(rows: TodRow[], f: (r: TodRow) => T | null): (T | null)[] {
+  const a: (T | null)[] = new Array(96).fill(null);
+  for (const r of rows) if (r.block >= 1 && r.block <= 96) a[r.block - 1] = f(r);
+  return a;
+}
+
+/**
+ * The plant's ToD schedule for the day through app_tod_schedule() (migration 005), which falls back
+ * to the same DISCOM / state and the nearest month. Before 005 is applied, falls back to the plant's
+ * own rows for that month.
+ */
+export async function todSchedule(q: Query, plantId: number, date: string): Promise<{ rows: TodRow[]; source: TodSource | null }> {
+  // Check first: an error inside the request's transaction would abort every query after it.
+  const [{ ok }] = await q<{ ok: boolean }>(`SELECT to_regprocedure('app_tod_schedule(integer,date)') IS NOT NULL AS ok`);
+  const rows = ok
+    ? await q<TodRow>(`SELECT block, tod, grid_rate, solar_rate, source, src_year, src_month FROM app_tod_schedule($1, $2::date)`, [plantId, date])
+    : await q<TodRow>(`
+      SELECT DISTINCT ON (t.block) t.block, t.tod_type AS tod,
+             (CASE lower(p.voltage_level) WHEN '132_kv' THEN t.tariff_132_kv WHEN '66_kv' THEN t.tariff_66_kv ELSE t.tariff_33_kv END
+              + coalesce(t.fppca_charge, 0))::float8 AS grid_rate,
+             NULL::float8 AS solar_rate, 'plant' AS source, t.year AS src_year, t.month AS src_month
+      FROM state_grid_discom_tariff t JOIN plant p ON p.plant_id = t.plant_id
+      WHERE t.plant_id = $1 AND t.year = extract(year FROM $2::date)::int AND t.month = extract(month FROM $2::date)::int
+      ORDER BY t.block, t.id`, [plantId, date]);
+  const r = rows[0];
+  return { rows, source: r ? { kind: r.source as TodSource['kind'], year: r.src_year, month: r.src_month } : null };
+}
 
 /** 'Off-Peak', 'OFF_PEAK', 'offpeak' -> 'OFFPEAK'; 'Peak' -> 'PEAK'; 'Normal' -> 'NORMAL'. */
 export function normaliseTod(v: string | null): string | null {
@@ -116,14 +149,7 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
       FROM trading_result_block
       WHERE plant_id = $1 AND date BETWEEN $2::date - 6 AND $2::date AND upper(type_) = 'BUY'
       GROUP BY date`, [plantId, date]),
-    // DISCOM ToD schedule for the plant's month (one row per block; first one wins if states differ)
-    q<{ block: number; tod: string | null; rate: number | null }>(`
-      SELECT DISTINCT ON (t.block) t.block, t.tod_type AS tod,
-             (CASE lower(p.voltage_level) WHEN '132_kv' THEN t.tariff_132_kv WHEN '66_kv' THEN t.tariff_66_kv ELSE t.tariff_33_kv END
-              + coalesce(t.fppca_charge, 0))::float8 AS rate
-      FROM state_grid_discom_tariff t JOIN plant p ON p.plant_id = t.plant_id
-      WHERE t.plant_id = $1 AND t.year = extract(year FROM $2::date)::int AND t.month = extract(month FROM $2::date)::int
-      ORDER BY t.block, t.id`, [plantId, date]),
+    todSchedule(q, plantId, date),
   ]);
 
   // ---- per-block series
@@ -219,8 +245,10 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   }
 
   return {
-    tod: (() => { const a: (string | null)[] = new Array(96).fill(null); for (const t of tariff) if (t.block >= 1 && t.block <= 96) a[t.block - 1] = normaliseTod(t.tod); return a; })(),
-    gridRate: (() => { const a: (number | null)[] = new Array(96).fill(null); for (const t of tariff) if (t.block >= 1 && t.block <= 96) a[t.block - 1] = t.rate; return a; })(),
+    tod: perBlock(tariff.rows, (t) => normaliseTod(t.tod)),
+    gridRate: perBlock(tariff.rows, (t) => t.grid_rate),
+    solarRate: perBlock(tariff.rows, (t) => t.solar_rate),
+    todSource: tariff.source,
     date, isToday, now, demand, solar, solarUsed, surplus, bank, iex, iexUsed, grid, iexRate, mcp,
     hasSolar: mappings.length > 0,
     totals, landedRate, peak, prebid, banking, history,

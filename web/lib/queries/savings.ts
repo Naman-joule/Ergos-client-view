@@ -127,22 +127,41 @@ export async function loadSavings(q: Query, plantId: number, plantName: string, 
       FROM iex_tod_daily_obligation o
       WHERE ${STATEMENT_OF_PLANT} AND o.trade_date BETWEEN $3::date AND $4::date
       ORDER BY o.trade_date, (o.plant_id IS NULL), o.id DESC`, [plantId, plantName, period.from, period.to]),
-    // Indicative ToD split: cleared blocks priced at the DISCOM ToD tariff for the plant's voltage level + FPPCA.
-    q<TodSplitRow>(`
-      SELECT t.tod_type,
-             sum(coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250))::float8 AS kwh,
-             sum(coalesce(b.landed_cost, coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250) * b.landed_cost_rs_per_kwh))::float8 AS landed,
-             sum(coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250)
-                 * (CASE p.voltage_level WHEN '132_kv' THEN t.tariff_132_kv WHEN '66_kv' THEN t.tariff_66_kv ELSE t.tariff_33_kv END
-                    + coalesce(t.fppca_charge, 0)))::float8 AS grid
-      FROM trading_result_block b
-      JOIN plant p ON p.plant_id = b.plant_id
-      JOIN state_grid_discom_tariff t
-        ON t.plant_id = b.plant_id AND t.block = b.block_no
-       AND t.year = extract(year FROM b.date)::int AND t.month = extract(month FROM b.date)::int
-      WHERE b.plant_id = $1 AND b.date BETWEEN $2::date AND $3::date AND upper(b.type_) = 'BUY'
-      GROUP BY t.tod_type
-      ORDER BY CASE upper(t.tod_type) WHEN 'PEAK' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END`, [plantId, period.from, period.to]),
+    // Indicative ToD split: cleared blocks priced at the plant's DISCOM ToD tariff (voltage level + FPPCA),
+    // via app_tod_schedule() per month (migration 005: falls back to the same DISCOM / state and nearest month).
+    q<{ ok: boolean }>(`SELECT to_regprocedure('app_tod_schedule(integer,date)') IS NOT NULL AS ok`).then(([{ ok }]) => ok
+      ? q<TodSplitRow>(`
+          WITH b AS (
+            SELECT date_trunc('month', date)::date AS m, block_no,
+                   coalesce(cleared_quantity, cleared_quantity_mw * 250) AS kwh,
+                   coalesce(landed_cost, coalesce(cleared_quantity, cleared_quantity_mw * 250) * landed_cost_rs_per_kwh) AS landed
+            FROM trading_result_block
+            WHERE plant_id = $1 AND date BETWEEN $2::date AND $3::date AND upper(type_) = 'BUY'
+          ), s AS (
+            SELECT mo.m, t.block, t.tod, t.grid_rate
+            FROM (SELECT DISTINCT m FROM b) mo CROSS JOIN LATERAL app_tod_schedule($1, mo.m) t
+          )
+          SELECT upper(regexp_replace(s.tod, '[^A-Za-z]', '', 'g')) AS tod_type,
+                 sum(b.kwh)::float8 AS kwh, sum(b.landed)::float8 AS landed, sum(b.kwh * s.grid_rate)::float8 AS grid
+          FROM b JOIN s ON s.m = b.m AND s.block = b.block_no
+          GROUP BY 1
+          ORDER BY CASE upper(regexp_replace(s.tod, '[^A-Za-z]', '', 'g')) WHEN 'PEAK' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END`,
+          [plantId, period.from, period.to])
+      : q<TodSplitRow>(`
+          SELECT t.tod_type,
+                 sum(coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250))::float8 AS kwh,
+                 sum(coalesce(b.landed_cost, coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250) * b.landed_cost_rs_per_kwh))::float8 AS landed,
+                 sum(coalesce(b.cleared_quantity, b.cleared_quantity_mw * 250)
+                     * (CASE p.voltage_level WHEN '132_kv' THEN t.tariff_132_kv WHEN '66_kv' THEN t.tariff_66_kv ELSE t.tariff_33_kv END
+                        + coalesce(t.fppca_charge, 0)))::float8 AS grid
+          FROM trading_result_block b
+          JOIN plant p ON p.plant_id = b.plant_id
+          JOIN state_grid_discom_tariff t
+            ON t.plant_id = b.plant_id AND t.block = b.block_no
+           AND t.year = extract(year FROM b.date)::int AND t.month = extract(month FROM b.date)::int
+          WHERE b.plant_id = $1 AND b.date BETWEEN $2::date AND $3::date AND upper(b.type_) = 'BUY'
+          GROUP BY t.tod_type
+          ORDER BY CASE upper(t.tod_type) WHEN 'PEAK' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END`, [plantId, period.from, period.to])),
     profileDays
       ? q<{ d: string; block_no: number; kwh: number }>(`
           SELECT date::text AS d, block_no, sum(coalesce(cleared_quantity, cleared_quantity_mw * 250))::float8 AS kwh

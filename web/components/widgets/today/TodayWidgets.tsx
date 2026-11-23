@@ -126,7 +126,7 @@ function TodaySupply({ data, plant, title }: Ctx & { title?: string }) {
       {data.now < 0 ? <Empty title="No meter data for this day yet">The supply chart fills in as readings arrive.</Empty> : (
         <SupplyChart demand={data.demand} solarUsed={data.solarUsed} bank={data.bank} iex={data.iex} iexUsed={data.iexUsed} grid={data.grid}
           surplus={data.surplus} iexRate={data.iexRate} now={data.now} dayLabel={formatWeekday(data.date).replace(',', '')}
-          tod={data.tod} gridRate={data.gridRate}
+          tod={data.tod} gridRate={data.gridRate} solarRate={data.solarRate} todSource={data.todSource} date={data.date} isToday={data.isToday}
           icons={iconMap(['solar', 'exchange', 'grid', 'battery'], 13)} />
       )}
     </Card>

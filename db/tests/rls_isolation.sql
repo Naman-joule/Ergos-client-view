@@ -19,6 +19,7 @@ SELECT pg_temp.chk((SELECT count(*) FROM client) = 0, 'no user: sees no clients'
 SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data) = 0, 'no user: sees no meter data');
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation) = 0, 'no user: sees no savings');
 SELECT pg_temp.chk((SELECT count(*) FROM app_session_user()) = 0, 'no user: no session user');
+SELECT pg_temp.chk((SELECT count(*) FROM app_tod_schedule(900001, current_date)) = 0, 'no user: no ToD schedule');
 
 -- ---------------------------------------------------------------- films user (900004)
 SELECT set_config('app.user_id', '900004', false);
@@ -62,6 +63,8 @@ SELECT set_config('app.user_id', '900005', false);
 SELECT pg_temp.chk((SELECT count(*) FROM plant p JOIN plant_type t ON t.id = p.plant_type_id WHERE t.type = 'consumer') = 1,
                    'single-plant: sees exactly one consumer plant', (SELECT string_agg(name, ',') FROM plant));
 SELECT pg_temp.chk((SELECT plant_id FROM plant) = 900002, 'single-plant: the plant is DEMO CEMENT K2');
+SELECT pg_temp.chk((SELECT count(*) FROM app_tod_schedule(900001, current_date)) = 0, 'single-plant: no ToD schedule for K1 (not accessible)');
+SELECT pg_temp.chk((SELECT count(*) FROM app_tod_schedule(900002, current_date)) = 96, 'single-plant: ToD schedule for own K2 (96 blocks)');
 SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data WHERE plant_id IN (900001, 900005)) = 0, 'single-plant: sees no K1 or solar meter data');
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE plant_id <> 900002) = 0, 'single-plant: sees only K2 savings');
 
