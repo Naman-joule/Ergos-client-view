@@ -4,7 +4,7 @@ DELETE FROM dashboard_config          WHERE id = 900001;
 DELETE FROM user_plant_map            WHERE id = 900001;
 DELETE FROM user_client_map           WHERE id BETWEEN 900001 AND 900005;
 DELETE FROM "user"                    WHERE id BETWEEN 900001 AND 900005;
-DELETE FROM iex_tod_daily_obligation  WHERE plant_id BETWEEN 900001 AND 900004 AND id BETWEEN 900001 AND 909999;
+DELETE FROM iex_tod_daily_obligation  WHERE id BETWEEN 900001 AND 909999;   -- by id: some may have no plant_id
 DELETE FROM plant_open_access_charges WHERE id BETWEEN 900001 AND 900004;
 DELETE FROM state_grid_discom_tariff  WHERE plant_id BETWEEN 900001 AND 900004 AND id BETWEEN 900001 AND 909999;
 DELETE FROM banking                   WHERE plant_id = 900001 AND id >= 900001;

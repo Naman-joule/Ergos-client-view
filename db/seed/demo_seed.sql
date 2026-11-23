@@ -263,8 +263,7 @@ INSERT INTO dashboard_config (id, client_id, version, status, spec, note, create
     "theme": { "palette": "volt", "mode": "dark" },
     "pages": {
       "today": { "widgets": [
-        { "type": "today.folder", "span": "wide" },
-        { "type": "today.tiles", "span": "narrow", "tiles": ["grid", "iex", "peak", "iex_price"] },
+        { "type": "today.tiles", "span": "full", "tiles": ["demand", "grid", "iex", "peak"] },
         { "type": "today.supply", "span": "full" },
         { "type": "today.prebid", "span": "full", "title": "Bid against cleared" }
       ] },

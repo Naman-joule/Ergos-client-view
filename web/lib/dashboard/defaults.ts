@@ -7,8 +7,7 @@ export const DEFAULT_SPEC: DashboardSpec = {
   pages: {
     today: {
       widgets: [
-        { type: 'today.folder', span: 'wide' },
-        { type: 'today.tiles', span: 'narrow', tiles: ['grid', 'iex', 'peak', 'iex_price'] },
+        { type: 'today.tiles', span: 'full', tiles: ['demand', 'grid', 'iex', 'solar', 'peak', 'iex_price'] },
         { type: 'today.supply', span: 'full' },
         { type: 'today.prebid', span: 'full' },
         { type: 'today.banking', span: 'full' },

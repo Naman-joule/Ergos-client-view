@@ -175,3 +175,8 @@
   .ecv-switcher { width: 100%; }
   .ecv-scope__controls { margin-left: 0; }
 }
+
+/* ---------------------------------------------------------------- tiles across the full width */
+.ecv-span-full .ecv-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ecv-span-full .ecv-tiles--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1180px) { .ecv-span-full .ecv-tiles, .ecv-span-full .ecv-tiles--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
