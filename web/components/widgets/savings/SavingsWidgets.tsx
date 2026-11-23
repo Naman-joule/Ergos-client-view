@@ -1,8 +1,9 @@
 import type { SavingsWidget } from '@/lib/dashboard/schema';
-import { CHARGE_COLUMNS, safeReportUrl, type Period, type SavingsData } from '@/lib/queries/savings';
+import { CHARGE_COLUMNS, type Period, type SavingsData, type SavingsRow } from '@/lib/queries/savings';
+import { REPORT_KINDS, locateReport, type ReportKind } from '@/lib/reports';
 import type { PlantRow } from '@/lib/queries/scope';
 import { compact, inr, pct, rate as fmtRate, rupeeParts, rupees } from '@/lib/format';
-import { formatDate, formatDayMonth, formatRange } from '@/lib/time';
+import { formatDate, formatDayMonth, formatRange, formatWeekday } from '@/lib/time';
 import type { SeriesKey } from '@/lib/ui/ergos';
 import { Folder, Sheet } from '../../ui/Folder';
 import { Chip } from '../../ui/Chip';
@@ -105,7 +106,11 @@ function SavingsDaily({ data, plant, period, title }: Ctx & { title?: string }) 
           <span><span className="eg-swatch ecv-swatch-line" data-series="grid" />Volume cleared (kWh)</span>
         </div>
       </>}>
-      <SavingsChart labels={labels} savings={savings} volume={volume} height={320} />
+      <SavingsChart labels={labels} savings={savings} volume={volume} height={320}
+        days={data.rows.map((r) => ({
+          label: formatWeekday(r.trade_date), savings: r.net_savings_per_day || 0, volume: r.volume_cleared_kwh || 0,
+          landed: r.avg_landed_iex_tariff, grid: r.avg_grid_tariff, pct: r.percent_below_grid, locked: r.is_locked,
+        }))} />
     </Card>
   );
 }
@@ -178,6 +183,33 @@ function SavingsProfile({ data, plant, period, days, title }: Ctx & { days: numb
   );
 }
 
+// ---------------------------------------------------------------------------- savings sheets
+// One button per file ergOS produced for the day (Excel sheet, PDF, Word statement, ZIP bundle).
+// Files on the report server download through /api/reports, which re-checks access; plain web links open directly.
+const SHEET_ORDER: ReportKind[] = ['excel', 'pdf', 'docx', 'zip'];
+
+function SheetLinks({ row, plantId }: { row: SavingsRow; plantId: number }) {
+  const links = SHEET_ORDER.flatMap((k) => {
+    const loc = locateReport(row[REPORT_KINDS[k].column]);
+    if (!loc) return [];
+    const href = loc.via === 'url' ? loc.url
+      : `/api/reports?plant=${plantId}&date=${row.trade_date}&kind=${k}`;
+    return [{ k, href, external: loc.via === 'url' }];
+  });
+  if (!links.length) return <span className="eg-muted">—</span>;
+  return (
+    <span className="ecv-sheets">
+      {links.map(({ k, href, external }) => (
+        <a key={k} className={'ecv-sheet ecv-sheet--' + k} href={href}
+          {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : { download: '' })}
+          title={`${REPORT_KINDS[k].label} · ${formatDate(row.trade_date)}`}>
+          <Icon name="download" size={12} />{REPORT_KINDS[k].label}
+        </a>
+      ))}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------------------- table
 function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) {
   const head = title ?? 'Daily statement';
@@ -191,17 +223,16 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
         <table className="ecv-table">
           <thead>
             <tr>
-              <th>Date</th><th className="num">Volume (kWh)</th><th className="num">IEX landed (₹/kWh)</th><th className="num">IEX cost (₹)</th>
-              <th className="num">Benchmark (₹/kWh)</th><th className="num">Grid cost (₹)</th><th className="num">Net savings (₹)</th>
-              <th className="num">Below grid</th><th>Status</th><th>Report</th>
+              <th>Date</th><th className="num">Volume (kWh)</th><th className="num" title="IEX landed tariff, ₹/kWh">Landed ₹/kWh</th><th className="num">IEX cost (₹)</th>
+              <th className="num" title="Grid (DISCOM) benchmark, ₹/kWh">Benchmark ₹/kWh</th><th className="num">Grid cost (₹)</th><th className="num">Net savings (₹)</th>
+              <th className="num">Below grid</th><th className="ecv-sticky-end">Savings sheets</th>
             </tr>
           </thead>
           <tbody>
             {data.rows.map((r) => {
-              const url = safeReportUrl(r.pdf_report_path) ?? safeReportUrl(r.zip_bundle_path) ?? safeReportUrl(r.excel_file_path) ?? safeReportUrl(r.statement_docx_path);
               return (
                 <tr key={r.trade_date}>
-                  <td className="nowrap">{formatDate(r.trade_date)}</td>
+                  <td className="nowrap">{formatDate(r.trade_date)}{r.is_locked ? null : <> <Chip tone="warning">Provisional</Chip></>}</td>
                   <td className="num">{inr(r.volume_cleared_kwh)}</td>
                   <td className="num">{r.avg_landed_iex_tariff !== null ? r.avg_landed_iex_tariff.toFixed(4) : '—'}</td>
                   <td className="num">{inr(r.iex_total_cost, 2)}</td>
@@ -209,8 +240,7 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
                   <td className="num">{inr(r.grid_total_cost, 2)}</td>
                   <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}>{inr(r.net_savings_per_day, 2)}</td>
                   <td className="num">{r.percent_below_grid !== null ? `${r.percent_below_grid.toFixed(2)}%` : '—'}</td>
-                  <td>{r.is_locked ? <Chip>Locked</Chip> : <Chip tone="warning">Provisional</Chip>}</td>
-                  <td>{url ? <a className="ecv-link" href={url} target="_blank" rel="noopener noreferrer">PDF<Icon name="download" size={13} /></a> : <span className="eg-muted">—</span>}</td>
+                  <td className="ecv-sticky-end"><SheetLinks row={r} plantId={plant.plant_id} /></td>
                 </tr>
               );
             })}
@@ -225,7 +255,7 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
               <td className="num">{inr(t.gridCost, 2)}</td>
               <td className={'num' + (t.savings < 0 ? ' neg' : '')}>{inr(t.savings, 2)}</td>
               <td className="num">{t.percentBelow !== null ? `${(t.percentBelow * 100).toFixed(2)}%` : '—'}</td>
-              <td colSpan={2} />
+              <td className="ecv-sticky-end" />
             </tr>
           </tfoot>
         </table>

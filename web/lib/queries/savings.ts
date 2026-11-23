@@ -90,6 +90,16 @@ export async function latestStatementDate(q: Query, plantId: number, plantName: 
   return rows[0]?.d ?? null;
 }
 
+/** The stored file path for one day's statement of plant $1 (same matching as the savings rows). */
+export async function statementFilePath(q: Query, plantId: number, plantName: string, date: string,
+  column: 'excel_file_path' | 'pdf_report_path' | 'statement_docx_path' | 'zip_bundle_path'): Promise<string | null> {
+  const rows = await q<{ p: string | null }>(
+    `SELECT o.${column} AS p FROM iex_tod_daily_obligation o
+     WHERE ${STATEMENT_OF_PLANT} AND o.trade_date = $3::date
+     ORDER BY (o.plant_id IS NULL), o.id DESC LIMIT 1`, [plantId, plantName, date]);
+  return rows[0]?.p ?? null;
+}
+
 const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 export function totalsOf(rows: SavingsRow[]): SavingsTotals {
@@ -190,13 +200,3 @@ export async function loadSavings(q: Query, plantId: number, plantName: string, 
   return { rows, totals: totalsOf(rows), tod, heat };
 }
 
-/** Only http(s) report paths become links; anything else (file paths, s3://) is shown as text or not at all. */
-export function safeReportUrl(path: string | null): string | null {
-  if (!path) return null;
-  try {
-    const u = new URL(path);
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
