@@ -24,6 +24,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" />
       </head>
       <body className="eg-stage">
+        {/* Shared SVG pattern: surplus solar is drawn with diagonal blue stripes (app.css). */}
+        <svg className="ecv-hatch-defs" aria-hidden="true" focusable="false">
+          <defs>
+            <pattern id="ecv-hatch-surplus" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect className="ecv-hatch-bg" width="7" height="7" />
+              <line className="ecv-hatch-line" x1="0" y1="0" x2="0" y2="7" />
+            </pattern>
+          </defs>
+        </svg>
         {children}
         <Script src="/vendor/ergos/harmony.js" strategy="afterInteractive" />
       </body>

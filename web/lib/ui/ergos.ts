@@ -13,6 +13,11 @@ export interface ErgOSRuntime {
     demand: number[]; layers: { key: SeriesKey; label?: string; values?: number[] }[]; now: number;
     height?: number; yMax?: number; palette?: Palette; label?: string; onHover?: (row: HoverRow) => void;
   }): ChartApi;
+  areaChart(host: HTMLElement, opts: {
+    series: AreaSeries[]; stacked?: boolean; line?: { label?: string; values: (number | null)[]; forecast?: boolean };
+    now?: number | null; cursorMax?: number; height?: number; unit?: string; slots?: boolean; label?: string;
+    onHover?: (row: AreaHoverRow) => void;
+  }): ChartApi;
   trendChart(host: HTMLElement, opts: {
     series: AreaSeries[]; now?: number | null; cursor?: number; height?: number; unit?: string;
     format?: (v: number) => string; xLabel?: (i: number) => string; slots?: boolean; yAxis?: boolean;

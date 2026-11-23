@@ -90,23 +90,23 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
     switch (k) {
       case 'grid':
         return <StatTile key={k} series="grid" label="Grid" icon="grid" date={day} value={mwhValue(t.gridKwh)} unit="MWh"
-          foot="Derived: demand − IEX − solar" footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
+          foot="Derived: demand not met by solar, banking or IEX" footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
       case 'iex':
         return <StatTile key={k} series="iex" label="Power exchange" icon="exchange" date={day} value={mwhValue(t.iexKwh)} unit="MWh"
           spark={spark((d) => d.iexMwh)} foot={`${pctText(share(t.iexKwh, t.demandKwh))} of demand`}
           footChip={<Chip tone="accent">{pctText(share(t.iexKwh, t.demandKwh))}</Chip>} />;
       case 'solar':
         return <StatTile key={k} series="solar" label="Solar" icon="solar" date={day} value={mwhValue(t.solarKwh)} unit="MWh"
-          foot={data.hasSolar ? 'Captive, through mapping' : 'No solar mapped'} />;
+          foot={data.hasSolar ? (t.surplusKwh > 0.5 ? `${mwhValue(t.surplusKwh)} MWh beyond demand` : 'Captive, through mapping') : 'No solar mapped'} />;
       case 'peak':
-        return <StatTile key={k} series="battery" label="Peak demand" icon="gauge" date={day}
+        return <StatTile key={k} series="wind" label="Peak demand" icon="gauge" date={day}
           value={data.peak ? inr(Math.round(data.peak.kw)) : '—'} unit="kW" spark={spark((d) => d.peakKw)}
           foot={data.peak ? `at ${blockEnd(data.peak.block)} · Block ${data.peak.block}` : 'No readings'} />;
       case 'demand':
         return <StatTile key={k} series="demand" label="Demand" icon="bolt" date={day} value={mwhValue(t.demandKwh)} unit="MWh"
           spark={spark((d) => d.demandMwh)} foot={data.isToday ? 'So far today' : 'Whole day'} />;
       case 'iex_price':
-        return <StatTile key={k} series="gov" label="IEX landed price" icon="rupee" date={day}
+        return <StatTile key={k} series="iex" label="IEX landed price" icon="rupee" date={day}
           value={data.landedRate !== null ? `₹${data.landedRate.toFixed(2)}` : '—'} unit="/ kWh"
           spark={spark((d) => d.landedRate)} foot="Landed, incl. open access charges"
           footChip={delta === null ? undefined : Math.abs(delta) < 0.005 ? <Chip>No change</Chip>
@@ -122,11 +122,11 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
 function TodaySupply({ data, plant, title }: Ctx & { title?: string }) {
   return (
     <Card title={<>{title ?? 'Energy supply'} {data.isToday ? <Chip tone="accent"><LiveDot />Live</Chip> : null}</>}
-      sub={`${plant.name} · ${formatDateLong(data.date)} · 96 blocks of 15 minutes · grid is derived`}>
+      sub={`${plant.name} · ${formatDateLong(data.date)} · 96 blocks of 15 minutes · grid is derived · surplus solar sits above demand`}>
       {data.now < 0 ? <Empty title="No meter data for this day yet">The supply chart fills in as readings arrive.</Empty> : (
-        <SupplyChart demand={data.demand} solar={data.solar} iex={data.iex} iexRate={data.iexRate} now={data.now}
-          hasSolar={data.hasSolar} dayLabel={formatWeekday(data.date).replace(',', '')}
-          icons={iconMap(['solar', 'exchange', 'grid'], 13)} />
+        <SupplyChart demand={data.demand} solarUsed={data.solarUsed} bank={data.bank} iex={data.iex} iexUsed={data.iexUsed} grid={data.grid}
+          surplus={data.surplus} iexRate={data.iexRate} now={data.now} dayLabel={formatWeekday(data.date).replace(',', '')}
+          icons={iconMap(['solar', 'exchange', 'grid', 'battery'], 13)} />
       )}
     </Card>
   );

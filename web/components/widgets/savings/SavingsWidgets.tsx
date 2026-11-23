@@ -111,7 +111,8 @@ function SavingsDaily({ data, plant, period, title }: Ctx & { title?: string }) 
 }
 
 // ---------------------------------------------------------------------------- charges
-const CHARGE_SERIES: SeriesKey[] = ['grid', 'solar', 'wind', 'hydro', 'battery', 'gov', 'demand', 'wind', 'hydro'];
+// Neutral, distinct tones for the charge tiles; avoids banking red and surplus blue, which mean something.
+const CHARGE_SERIES: SeriesKey[] = ['grid', 'wind', 'demand', 'solar', 'grid', 'wind', 'demand', 'solar', 'grid'];
 
 function SavingsCharges({ data, plant, period, title }: Ctx & { title?: string }) {
   const head = title ?? 'Where the landed cost goes';
