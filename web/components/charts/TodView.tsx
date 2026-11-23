@@ -140,11 +140,14 @@ export function TodView(input: TodInput & { dayLabel: string; date: string; isTo
               {r.demand > 0 ? (
                 <>
                   <line x1={x0} x2={x1} y1={Y(demandKw)} y2={Y(demandKw)} className="ecv-tod__demand" />
-                  {w >= 40 ? <text x={(x0 + x1) / 2} y={Y(Math.max(demandKw, base)) - 7} className="eg-axis eg-axis--strong" textAnchor="middle">{energy(r.demand)}</text> : null}
+                  {w >= 24 ? <text x={(x0 + x1) / 2} y={Y(Math.max(demandKw, base)) - 7} className="eg-axis eg-axis--strong" textAnchor="middle">{energy(r.demand)}</text> : null}
                 </>
               ) : null}
-              <text x={(x0 + x1) / 2} y={H - 14} className="eg-axis eg-axis--strong" textAnchor="middle">
-                {w >= 90 ? `${r.label} · ${inr(r.hours, r.hours % 1 ? 2 : 0)} h` : w >= 40 ? r.label : ''}
+              {/* period label under every bar; narrow bars at the edges are anchored inward so they don't clip */}
+              <text x={r.end >= 95 && w < 90 ? x1 + 4 : r.start === 0 && w < 90 ? x0 : (x0 + x1) / 2} y={H - 14}
+                className={'eg-axis eg-axis--strong' + (w < 90 ? ' ecv-tod__label--sm' : '')}
+                textAnchor={r.end >= 95 && w < 90 ? 'end' : r.start === 0 && w < 90 ? 'start' : 'middle'}>
+                {w >= 12 ? `${r.label} · ${inr(r.hours, r.hours % 1 ? 2 : 0)} h` : ''}
               </text>
               {/* hit area: hover to read, click to pin */}
               <rect x={x0} y={T} width={w} height={ph + 26} className="ecv-tod__hit" tabIndex={0}

@@ -270,3 +270,4 @@
 .ecv-tod__hit:focus-visible { outline: none; stroke: var(--focus-ring); stroke-width: 2; }
 @media (max-width: 1180px) { .ecv-tod__summary { border-left: 0; border-top: 1px solid var(--line); grid-template-columns: repeat(4, auto); } }
 .ecv-tod__hit:focus { outline: none; }
+.ecv-tod__label--sm { font-size: 11px; }

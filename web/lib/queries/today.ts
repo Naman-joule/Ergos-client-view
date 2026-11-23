@@ -100,7 +100,8 @@ export async function todSchedule(q: Query, plantId: number, date: string): Prom
 /** 'Off-Peak', 'OFF_PEAK', 'offpeak' -> 'OFFPEAK'; 'Peak' -> 'PEAK'; 'Normal' -> 'NORMAL'. */
 export function normaliseTod(v: string | null): string | null {
   if (!v) return null;
-  const k = v.toUpperCase().replace(/[^A-Z]/g, '');
+  // keep digits: DISCOMs may number repeated periods (NORMAL_1 05–11, NORMAL_2 11–17) and they must stay separate
+  const k = v.toUpperCase().replace(/[^A-Z0-9]/g, '');
   return k || null;
 }
 

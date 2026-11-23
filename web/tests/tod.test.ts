@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ranges, runStats, todRuns } from '../lib/tod.ts';
+import { ranges, runStats, todName, todRuns } from '../lib/tod.ts';
 
 const seq = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 // Off-peak 00:00–05:00, Normal 05:00–17:00, Peak 17:00–23:00, Off-peak 23:00–24:00
@@ -57,4 +57,18 @@ test('only blocks up to now count; later runs are marked future', () => {
   assert.equal(Math.round(s[1]!.balance.mwh * 1000), 500);             // 10 × 200 kW / 4
   assert.equal(s[2]!.future, true);
   assert.equal(s[2]!.balance.kind, 'none');
+});
+
+test('todRuns keeps separately numbered or priced periods apart', () => {
+  const tod = Array.from({ length: 96 }, (_, i) => (i < 20 ? 'OFFPEAK' : i < 44 ? 'NORMAL' : i < 68 ? 'NORMAL' : i < 92 ? 'PEAK' : 'OFFPEAK'));
+  const rate = tod.map((_, i) => (i < 20 ? 5 : i < 44 ? 7 : i < 68 ? 6.2 : i < 92 ? 8.5 : 5));
+  assert.deepEqual(todRuns(tod, rate).map((r) => `${r.key}:${r.start}-${r.end}`),
+    ['OFFPEAK:0-19', 'NORMAL:20-43', 'NORMAL:44-67', 'PEAK:68-91', 'OFFPEAK:92-95']);
+  // same name, same rate -> one run (unchanged behaviour)
+  assert.equal(todRuns(tod, tod.map(() => 7)).length, 4);
+  // numbered labels stay separate and read as the base name
+  const numbered = tod.map((t, i) => (t === 'NORMAL' ? (i < 44 ? 'NORMAL1' : 'NORMAL2') : t));
+  assert.equal(todRuns(numbered).length, 5);
+  assert.equal(todName('NORMAL2'), 'Normal');
+  assert.equal(todName('OFFPEAK1'), 'Off-peak');
 });

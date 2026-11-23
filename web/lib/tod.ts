@@ -11,7 +11,11 @@ export interface TodInput {
 }
 
 const NAME: Record<string, string> = { OFFPEAK: 'Off-peak', NORMAL: 'Normal', PEAK: 'Peak' };
-export const todName = (k: string) => NAME[k] ?? k.charAt(0) + k.slice(1).toLowerCase();
+/** Display name; numbered variants (NORMAL2, OFFPEAK1) read like their base period. */
+export const todName = (k: string) => {
+  const base = k.replace(/\d+$/, '');
+  return NAME[base] ?? (base.charAt(0) + base.slice(1).toLowerCase() || k);
+};
 
 /** Contiguous block runs as "00:00–06:00, 22:00–24:00" (blocks are 1-based). */
 export function ranges(blocks: number[]): string {
@@ -28,13 +32,17 @@ export function ranges(blocks: number[]): string {
 
 export interface TodRun { key: string; start: number; end: number }        // 0-based block indexes, inclusive
 
-/** Contiguous runs of the same ToD period. Blocks with no period are skipped. */
-export function todRuns(tod: (string | null)[]): TodRun[] {
+/** Contiguous runs of the same ToD period. A new run also starts where the grid rate changes, so two
+ *  periods the DISCOM prices separately (e.g. Normal 05–11 and Normal 11–17) stay separate even when
+ *  they share a name. Blocks with no period are skipped. */
+export function todRuns(tod: (string | null)[], rate?: (number | null)[]): TodRun[] {
   const runs: TodRun[] = [];
+  const same = (a: number | null | undefined, b: number | null | undefined) =>
+    a == null || b == null ? a == b : Math.abs(a - b) < 0.005;
   tod.forEach((t, i) => {
     if (!t) return;
     const last = runs[runs.length - 1];
-    if (last && last.key === t && last.end === i - 1) last.end = i;
+    if (last && last.key === t && last.end === i - 1 && (!rate || same(rate[i - 1], rate[i]))) last.end = i;
     else runs.push({ key: t, start: i, end: i });
   });
   return runs;
@@ -52,7 +60,7 @@ export interface RunStats extends TodRun {
 /** Energy (MWh), rates and cost per run, counting only blocks up to `now`. */
 export function runStats(input: TodInput): RunStats[] {
   const { tod, now, demand, layers, iexRate, gridRate, solarRate } = input;
-  return todRuns(tod).map((run) => {
+  return todRuns(tod, gridRate).map((run) => {
     const done: number[] = [];
     for (let i = run.start; i <= Math.min(run.end, now); i++) done.push(i);
     const mwh = (a: number[]) => done.reduce((s, i) => s + (a[i] || 0), 0) / 4 / 1000;
