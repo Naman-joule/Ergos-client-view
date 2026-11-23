@@ -271,3 +271,37 @@
 @media (max-width: 1180px) { .ecv-tod__summary { border-left: 0; border-top: 1px solid var(--line); grid-template-columns: repeat(4, auto); } }
 .ecv-tod__hit:focus { outline: none; }
 .ecv-tod__label--sm { font-size: 11px; }
+
+/* ---------------------------------------------------------------- KPI cards in one compact row */
+/* Sized by the space the cards actually get (container query), not the window, so the sidebar counts. */
+.ecv-tiles-wrap { container-type: inline-size; }
+.ecv-tiles-wrap > .ecv-tiles--row { grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); gap: var(--space-3); }
+.ecv-tiles--row .eg-stat { padding: 14px 16px 12px; gap: 2px; border-radius: var(--radius-sm); }
+.ecv-tiles--row .eg-stat__label { font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ecv-tiles--row .eg-stat__icon { width: 26px; height: 26px; flex: none; }
+.ecv-tiles--row .eg-stat__icon svg { width: 13px; height: 13px; }
+.ecv-tiles--row .eg-stat__date { display: none; }            /* the date is in the bar above */
+.ecv-tiles--row .eg-stat__value { margin-top: 6px; font-size: 24px; line-height: 28px; gap: 4px; }
+.ecv-tiles--row .eg-stat__unit { font-size: 12px; }
+.ecv-tiles--row .eg-stat__foot { font-size: 11px; line-height: 14px; align-items: flex-end; margin-top: 2px; }
+.ecv-tiles--row .eg-stat__foot > span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ecv-tiles--row .eg-stat__foot .eg-chip { height: 20px; padding: 0 7px; font-size: 11px; flex: none; }
+@container (max-width: 1020px) { .ecv-tiles-wrap > .ecv-tiles--row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (max-width: 540px)  { .ecv-tiles-wrap > .ecv-tiles--row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------------------------------------------------------------- slimmer client / plant bar */
+.ecv-scope { padding: var(--space-3) var(--space-4); }
+.ecv-scope .eg-account { padding: 6px 14px 6px 6px; gap: 10px; box-shadow: none; }
+.ecv-scope .ecv-logo--lg, .ecv-scope .ecv-plantsw__icon { width: 34px; height: 34px; border-radius: 10px; }
+.ecv-scope .ecv-plantsw__icon svg { width: 16px; height: 16px; }
+.ecv-scope .ecv-client-text { gap: 0; }
+.ecv-scope .ecv-client-label { font-size: 10px; line-height: 12px; letter-spacing: .07em; }
+.ecv-scope .eg-account__name { font-size: 14px; line-height: 18px; }
+.ecv-scope .eg-account__meta { font-size: 11.5px; line-height: 15px; }
+.ecv-scope .ecv-chev { margin-left: 2px; }
+.ecv-scope .eg-icon-btn, .ecv-scope .eg-icon-btn--sm { width: 32px; height: 32px; }
+.ecv-scope .eg-chip--lg { height: 34px; padding: 0 14px; font-size: 13px; }
+.ecv-tiles--row > .eg-stat, .ecv-tiles--row .eg-stat > * { min-width: 0; }   /* let one-line captions ellipsize instead of widening the card */
+.ecv-tiles--row .eg-stat__spark { margin: 2px -2px 0; }
+.ecv-tiles--row .eg-stat__foot { align-items: center; }
+.ecv-tiles--row .eg-stat__foot > span:first-child { flex: 1 1 auto; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

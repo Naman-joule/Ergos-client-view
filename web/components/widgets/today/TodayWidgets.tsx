@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { TodayWidget } from '@/lib/dashboard/schema';
 import type { TodayData } from '@/lib/queries/today';
 import type { PlantRow } from '@/lib/queries/scope';
@@ -90,10 +91,10 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
     switch (k) {
       case 'grid':
         return <StatTile key={k} series="grid" label="Grid" icon="grid" date={day} value={mwhValue(t.gridKwh)} unit="MWh"
-          foot="Derived: demand not met by solar, banking or IEX" footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
+          foot="Residual demand"  footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
       case 'iex':
         return <StatTile key={k} series="iex" label="Power exchange" icon="exchange" date={day} value={mwhValue(t.iexKwh)} unit="MWh"
-          spark={spark((d) => d.iexMwh)} foot={`${pctText(share(t.iexKwh, t.demandKwh))} of demand`}
+          spark={spark((d) => d.iexMwh)} foot="Share of demand"
           footChip={<Chip tone="accent">{pctText(share(t.iexKwh, t.demandKwh))}</Chip>} />;
       case 'solar':
         return <StatTile key={k} series="solar" label="Solar" icon="solar" date={day} value={mwhValue(t.solarKwh)} unit="MWh"
@@ -108,14 +109,19 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
       case 'iex_price':
         return <StatTile key={k} series="iex" label="IEX landed price" icon="rupee" date={day}
           value={data.landedRate !== null ? `₹${data.landedRate.toFixed(2)}` : '—'} unit="/ kWh"
-          spark={spark((d) => d.landedRate)} foot="Landed, incl. open access charges"
+          spark={spark((d) => d.landedRate)} foot="Incl. open access"
           footChip={delta === null ? undefined : Math.abs(delta) < 0.005 ? <Chip>No change</Chip>
             : <Chip tone={delta > 0 ? 'negative' : 'accent'}>{delta > 0 ? '▲' : '▼'} ₹{Math.abs(delta).toFixed(2)}</Chip>} />;
       default:
         return null;
     }
   };
-  return <div className={'ecv-tiles' + (tiles.length > 4 ? ' ecv-tiles--3' : '')}>{tiles.map(render)}</div>;
+  // one compact row (6 across on wide layouts; 3 or 2 per row as the space narrows, see app.css)
+  return (
+    <div className="ecv-tiles-wrap">
+      <div className="ecv-tiles ecv-tiles--row" style={{ '--n': tiles.length } as React.CSSProperties}>{tiles.map(render)}</div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------- supply
