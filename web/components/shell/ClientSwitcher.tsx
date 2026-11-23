@@ -2,12 +2,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ClientLogo } from './ClientLogo';
 
 export interface ClientOption {
   id: number;
   name: string;
   initials: string;
   meta: string;          // "8 plants · Uttar Pradesh"
+  logo: string | null;   // resolved logo URL (lib/logo.ts) or null for initials
   href: string;
 }
 
@@ -45,7 +47,7 @@ export function ClientSwitcher({ clients, currentId, icons }: {
 
   const Pill = (
     <>
-      <span className="eg-avatar eg-avatar--lg ecv-client-avatar" aria-hidden="true">{current.initials}</span>
+      <ClientLogo src={current.logo} initials={current.initials} name={current.name} />
       <span className="ecv-client-text">
         <span className="eg-overline ecv-client-label">Client</span>
         <span className="eg-account__name">{current.name}</span>
@@ -87,7 +89,7 @@ export function ClientSwitcher({ clients, currentId, icons }: {
               <li key={c.id} role="option" aria-selected={c.id === currentId}>
                 <Link href={c.href} className={'ecv-option' + (i === active ? ' is-active' : '')}
                   onMouseEnter={() => setActive(i)} onClick={() => setOpen(false)}>
-                  <span className="eg-avatar" aria-hidden="true">{c.initials}</span>
+                  <ClientLogo src={c.logo} initials={c.initials} name={c.name} size="sm" />
                   <span className="ecv-option__text"><b>{c.name}</b><small>{c.meta}</small></span>
                   {c.id === currentId ? <span className="ecv-option__check" aria-hidden="true" dangerouslySetInnerHTML={{ __html: icons.check }} /> : null}
                 </Link>

@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Query } from '../db';
 
-export interface ClientRow { client_id: number; name: string; alias_name: string | null }
+export interface ClientRow { client_id: number; name: string; alias_name: string | null; logo_url: string | null }
 export interface PlantRow {
   plant_id: number; client_id: number; name: string; state: string; discom: string | null;
   connected_load: number | null; voltage_level: string | null; is_auto_trading_enabled: boolean | null;
@@ -13,7 +13,7 @@ export interface Selection { client: ClientRow; plant: PlantRow; plants: PlantRo
  *  Plants without a client are skipped (nothing to group them under). */
 export async function loadScope(q: Query): Promise<Scope> {
   const [clients, plants] = await Promise.all([
-    q<ClientRow>(`SELECT client_id, name, alias_name FROM client WHERE coalesce(is_active, true) ORDER BY name`),
+    q<ClientRow>(`SELECT client_id, name, alias_name, logo_url FROM client WHERE coalesce(is_active, true) ORDER BY name`),
     q<PlantRow>(`
       SELECT p.plant_id, p.client_id, p.name, p.state, p.discom, p.connected_load, p.voltage_level, p.is_auto_trading_enabled
       FROM plant p LEFT JOIN plant_type t ON t.id = p.plant_type_id

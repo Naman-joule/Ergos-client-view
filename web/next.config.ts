@@ -13,7 +13,8 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline'" + (process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''),
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data:",
+      // client logos (client.logo_url) are hosted outside the app; images only, https only
+      "img-src 'self' data: https:",
       "connect-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'self'",

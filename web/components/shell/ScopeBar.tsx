@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ClientRow, PlantRow, Scope } from '@/lib/queries/scope';
 import { inr } from '@/lib/format';
 import { iconSvg } from '@/lib/ui/icon-svg';
+import { resolveLogoUrl } from '@/lib/logo';
 import { ClientSwitcher, type ClientOption } from './ClientSwitcher';
 import { PlantGrid, type PlantOption } from './PlantGrid';
 
@@ -28,6 +29,7 @@ export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls
   const byClient = (id: number) => scope.plants.filter((p) => p.client_id === id);
   const clients: ClientOption[] = scope.clients.map((c) => ({
     id: c.client_id, name: c.name, initials: initials(c.alias_name || c.name), meta: clientMeta(byClient(c.client_id)), href: clientHref(c),
+    logo: resolveLogoUrl(c.logo_url),
   }));
   const plants: PlantOption[] = byClient(client.client_id).map((p) => ({
     id: p.plant_id,
