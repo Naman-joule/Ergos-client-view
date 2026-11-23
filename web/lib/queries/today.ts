@@ -63,7 +63,10 @@ export interface HistoryDay { date: string; demandMwh: number; peakKw: number; i
 
 const zeros = () => new Array<number>(96).fill(0);
 
-export interface TodSource { kind: 'plant' | 'discom_category' | 'discom' | 'state'; year: number; month: number }
+export interface TodSource {
+  kind: 'master' | 'master_discom' | 'master_state' | 'plant' | 'discom_category' | 'discom' | 'state';
+  year: number; month: number;
+}
 interface TodRow { block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null; source: string; src_year: number; src_month: number }
 
 function perBlock<T>(rows: TodRow[], f: (r: TodRow) => T | null): (T | null)[] {

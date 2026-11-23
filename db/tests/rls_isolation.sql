@@ -20,6 +20,8 @@ SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data) = 0, 'no us
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation) = 0, 'no user: sees no savings');
 SELECT pg_temp.chk((SELECT count(*) FROM app_session_user()) = 0, 'no user: no session user');
 SELECT pg_temp.chk((SELECT count(*) FROM app_tod_schedule(900001, current_date)) = 0, 'no user: no ToD schedule');
+SELECT pg_temp.chk(to_regclass('master_grid_discom_tariff') IS NULL OR NOT has_table_privilege('master_grid_discom_tariff', 'SELECT'), 'app role cannot read master tariffs directly');
+SELECT pg_temp.chk(to_regclass('master_solar_tariff') IS NULL OR NOT has_table_privilege('master_solar_tariff', 'SELECT'), 'app role cannot read master solar tariffs directly');
 
 -- ---------------------------------------------------------------- films user (900004)
 SELECT set_config('app.user_id', '900004', false);

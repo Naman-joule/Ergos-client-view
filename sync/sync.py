@@ -8,6 +8,8 @@
 
 Environment:
     ERGOS_DATABASE_URL   read-only ergOS user
+    MASTER_DATABASE_URL  read-only user on the regulatory master DB (optional; master tables are
+                         skipped without it). SQLAlchemy-style "postgresql+psycopg2://" is accepted.
     TARGET_DATABASE_URL  reporting DB as owner (Supabase session pooler, port 5432)
     SYNC_WINDOW_DAYS     default 2
     SYNC_STALE_MINUTES   default 35
@@ -60,6 +62,12 @@ def env(name: str, default: str | None = None) -> str:
     if value is None or value == "":
         raise SystemExit(f"{name} is not set")
     return value
+
+
+def pg_url(url: str) -> str:
+    """Accept SQLAlchemy URLs (postgresql+psycopg2://...) as plain libpq URLs."""
+    scheme, sep, rest = url.partition("://")
+    return (scheme.split("+")[0] + sep + rest) if sep else url
 
 
 def today_ist() -> dt.date:
@@ -196,11 +204,20 @@ def sync_table(t: Table, src: psycopg.Connection, tgt: psycopg.Connection, runlo
         if t.extra_where and "%(headers)s" in t.extra_where:
             headers = [r[0] for r in tgt.execute(
                 "SELECT id FROM trading_result WHERE date >= %s", (since,)).fetchall()]
-        params = {"since": since, "plants": plants, "headers": headers}
+        states = [r[0] for r in tgt.execute(
+            "SELECT DISTINCT lower(trim(state)) FROM plant WHERE state IS NOT NULL").fetchall()]
+        params = {"since": since, "plants": plants, "headers": headers, "states": states}
         query = source_query(t, cols, since)
         ident = sql.Identifier(t.name)
 
-        if t.mode == "window":
+        if t.mode == "replace":
+            deleted = tgt.execute(sql.SQL("DELETE FROM {}").format(ident)).rowcount
+            n = stream_copy(src, tgt, query, params, ident, cols)
+            log.info("%s: replaced %s rows with %s (%.1fs)", t.name, deleted, n, time.monotonic() - started)
+            if n == 0:
+                log.warning("%s: nothing copied; check that plant.state matches the master's state names (%s)",
+                            t.name, ", ".join(states) or "no plants")
+        elif t.mode == "window":
             deleted = tgt.execute(
                 sql.SQL("DELETE FROM {} WHERE {} >= %s").format(ident, sql.Identifier(t.date_column)), (since,)
             ).rowcount
@@ -226,8 +243,9 @@ def sync_table(t: Table, src: psycopg.Connection, tgt: psycopg.Connection, runlo
 
 # ---------------------------------------------------------------------------- tiers
 def run_tier(tier: str, backfill: int | None, only: set[str] | None, dry_run: bool) -> int:
-    src_url = env("ERGOS_DATABASE_URL")
-    tgt_url = env("TARGET_DATABASE_URL")
+    src_url = pg_url(env("ERGOS_DATABASE_URL"))
+    tgt_url = pg_url(env("TARGET_DATABASE_URL"))
+    master_url = pg_url(os.environ.get("MASTER_DATABASE_URL") or "")
     window_days = int(os.environ.get("SYNC_WINDOW_DAYS") or 2)
 
     tables = [t for t in TABLES if tier in t.tiers and (only is None or t.name in only)]
@@ -236,14 +254,26 @@ def run_tier(tier: str, backfill: int | None, only: set[str] | None, dry_run: bo
         if unknown:
             raise SystemExit(f"unknown table(s): {', '.join(sorted(unknown))}")
 
+    if not master_url and any(t.source == "master" for t in tables):
+        log.warning("MASTER_DATABASE_URL not set: skipping %s",
+                    ", ".join(t.name for t in tables if t.source == "master"))
+        tables = [t for t in tables if t.source != "master"]
+
+    def open_source(url: str) -> psycopg.Connection:
+        conn = psycopg.connect(url)
+        conn.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+        conn.execute("SET statement_timeout = '300s'")
+        conn.execute("SET TimeZone = 'UTC'")
+        conn.commit()
+        return conn
+
     runlog = RunLog(tgt_url, tier, dry_run)
     run_id = runlog.start(RUN_MARKER, None)
+    master: psycopg.Connection | None = None
     try:
-        with psycopg.connect(src_url) as src, psycopg.connect(tgt_url) as tgt:
-            src.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-            src.execute("SET statement_timeout = '300s'")
-            src.execute("SET TimeZone = 'UTC'")
-            src.commit()
+        with open_source(src_url) as src, psycopg.connect(tgt_url) as tgt:
+            if master_url and any(t.source == "master" for t in tables):
+                master = open_source(master_url)
 
             # ergOS stores IST wall-clock times in "timestamp without time zone" columns. Read as text, they
             # carry no offset, so tell the target to interpret them as IST, or every reading lands 5h30m late.
@@ -259,7 +289,7 @@ def run_tier(tier: str, backfill: int | None, only: set[str] | None, dry_run: bo
             total = 0
             for t in tables:
                 try:
-                    sync_table(t, src, tgt, runlog, window_days, backfill)
+                    sync_table(t, master if t.source == "master" else src, tgt, runlog, window_days, backfill)
                 except Exception as e:  # noqa: BLE001
                     failed = str(e) if str(e).startswith(t.name + ":") else f"{t.name}: {e}"
                     log.error("FAILED %s", failed)
@@ -286,6 +316,8 @@ def run_tier(tier: str, backfill: int | None, only: set[str] | None, dry_run: bo
         runlog.finish(run_id, "error", None, str(e)[:2000])
         return 1
     finally:
+        if master is not None:
+            master.close()
         runlog.close()
 
 

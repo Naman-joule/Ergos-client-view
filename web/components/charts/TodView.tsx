@@ -9,7 +9,8 @@ import type { SeriesKey } from '@/lib/ui/ergos';
 // segments, the run's demand as a line, and surplus solar striped on top. Hover a run to read it;
 // click to pin. Drawn with design-system fill classes and tokens, so colours match the timeline.
 
-export interface TodSourceInfo { kind: 'plant' | 'discom_category' | 'discom' | 'state'; year: number; month: number }
+import type { TodSource as TodSourceInfo } from '@/lib/queries/today';
+export type { TodSourceInfo };
 
 const energy = (mwh: number) => (mwh >= 1 ? `${inr(mwh, 1)} MWh` : `${inr(mwh * 1000)} kWh`);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -17,7 +18,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function sourceNote(src: TodSourceInfo | null | undefined, date: string): string | null {
   if (!src) return null;
   const sameMonth = Number(date.slice(0, 4)) === src.year && Number(date.slice(5, 7)) === src.month;
-  const where = src.kind === 'plant' ? null : src.kind === 'state' ? 'the state’s DISCOM schedule' : 'the DISCOM schedule';
+  // exact matches need no note: the regulatory master for the plant's DISCOM + category, or the plant's own rows
+  const where = src.kind === 'plant' || src.kind === 'master' ? null
+    : src.kind === 'master_discom' ? 'the DISCOM’s schedule for another category'
+    : src.kind === 'master_state' || src.kind === 'state' ? 'another DISCOM in the state'
+    : 'the DISCOM schedule';
   const when = sameMonth ? null : `${MONTHS[src.month - 1]} ${src.year}`;
   if (!where && !when) return null;
   return `ToD periods from ${[where, when && `for ${when}`].filter(Boolean).join(' ')}${when ? ' (latest available)' : ''}.`;

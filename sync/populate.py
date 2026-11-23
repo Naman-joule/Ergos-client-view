@@ -306,6 +306,9 @@ def run_populate(
             continue
         if selected_tables and t.name not in selected_tables:
             continue
+        if t.source == "master":
+            log.info("%s: from the master DB; loaded by `python sync.py --tier slow`", t.name)
+            continue
         tables_to_sync.append(t)
 
     log.info("Tables to process (%d): %s", len(tables_to_sync), ", ".join(t.name for t in tables_to_sync))

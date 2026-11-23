@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Mode = Literal["upsert", "window"]
+Mode = Literal["upsert", "window", "replace"]
+Source = Literal["ergos", "master"]
 
 EVERY = frozenset({"fast", "slow"})
 FAST = frozenset({"fast"})
@@ -29,6 +30,9 @@ class Table:
     plant_nullable: bool = False            # also copy rows whose plant column is NULL
     # extra SQL filter on the source query. May use %(plants)s, %(headers)s, %(since)s
     extra_where: str | None = None
+    # which database the rows come from: ergOS (ERGOS_DATABASE_URL) or the regulatory master
+    # (MASTER_DATABASE_URL). Master tables are skipped when MASTER_DATABASE_URL is not set.
+    source: Source = "ergos"
 
 
 TABLES: tuple[Table, ...] = (
@@ -50,6 +54,15 @@ TABLES: tuple[Table, ...] = (
     Table("state_grid_solar_tariff", "upsert", SLOW, ("id",),
           plant_column="plant_id", plant_nullable=True,
           extra_where="year >= extract(year FROM current_date)::int - 1"),
+
+    # regulatory master (ergos_master_db): current rows only, for the states of plants we hold.
+    # "replace" deletes the whole copy and reloads it, so corrections and deletions come through.
+    Table("master_grid_discom_tariff", "replace", SLOW, ("id",), source="master",
+          extra_where="superseded_at IS NULL AND lower(trim(state)) = ANY(%(states)s)"
+                      " AND year >= extract(year FROM current_date)::int - 1"),
+    Table("master_solar_tariff", "replace", SLOW, ("id",), source="master",
+          extra_where="superseded_at IS NULL AND lower(trim(state)) = ANY(%(states)s)"
+                      " AND year >= extract(year FROM current_date)::int - 1"),
 
     # ---- fast tier (every 15 minutes): rolling windows ----------------------------------------
     Table("plant_processed_meter_data", "window", FAST, ("id",),
