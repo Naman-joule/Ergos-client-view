@@ -4,10 +4,13 @@ import type { AreaHoverRow, AreaSeries, SeriesKey } from '@/lib/ui/ergos';
 import { inr } from '@/lib/format';
 import { blockEnd } from '@/lib/time';
 import { useErgosDraw } from './useErgos';
+import { TodView } from './TodView';
 
-// Layers bottom-up. Chart keys are design-system series slots; app.css maps their colours:
-// solar green, banking (battery) red, IEX purple, grid amber, surplus (hydro slot) striped blue.
-type Src = 'solar' | 'bank' | 'iex' | 'grid' | 'surplus';
+// Layers bottom-up: IEX settles first, then solar, then banking; the grid covers the rest and
+// surplus solar sits above demand. Chart keys are design-system series slots; app.css maps colours:
+// IEX purple, solar green, banking (battery) red, grid amber, surplus (hydro slot) striped blue.
+type Src = 'iex' | 'solar' | 'bank' | 'grid' | 'surplus';
+const ORDER: Src[] = ['iex', 'solar', 'bank', 'grid', 'surplus'];
 const META: Record<Src, { key: SeriesKey; label: string; icon: string }> = {
   solar: { key: 'solar', label: 'Solar', icon: 'solar' },
   bank: { key: 'battery', label: 'Banking', icon: 'battery' },
@@ -19,6 +22,7 @@ const META: Record<Src, { key: SeriesKey; label: string; icon: string }> = {
 export interface SupplyProps {
   demand: number[]; solarUsed: number[]; bank: number[]; iex: number[]; iexUsed: number[]; grid: number[]; surplus: number[];
   iexRate: (number | null)[]; now: number; dayLabel: string;
+  tod: (string | null)[]; gridRate: (number | null)[];
   /** Pre-rendered icon SVG markup by name (server-generated), so the client bundle carries no icon map. */
   icons: Record<string, string>;
 }
@@ -27,16 +31,18 @@ function Ico({ svg }: { svg: string }) {
   return <span className="ecv-ico" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surplus, iexRate, now, dayLabel, icons }: SupplyProps) {
+export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surplus, iexRate, now, dayLabel, icons, tod, gridRate }: SupplyProps) {
+  const [view, setView] = useState<'timeline' | 'tod'>('timeline');
   // Stacked under demand: only the part of each source that met demand. Surplus solar sits above.
   const values: Record<Src, number[]> = { solar: solarUsed, bank, iex: iexUsed, grid, surplus };
   const hasIex = iex.some((v, i) => i <= now && v > 0.5);
   const has = (s: Src) => values[s].some((v, i) => i <= now && v > 0.5);
-  const sources = (['solar', 'bank', 'iex', 'grid', 'surplus'] as Src[]).filter((s) => s === 'grid' || (s === 'iex' ? hasIex : has(s)));
+  const sources = ORDER.filter((s) => s === 'grid' || (s === 'iex' ? hasIex : has(s)));
   const [on, setOn] = useState<Record<Src, boolean>>({ solar: true, bank: true, iex: true, grid: true, surplus: true });
   const [row, setRow] = useState<AreaHoverRow | null>(null);
 
   const ref = useErgosDraw((E, host) => {
+    if (view !== 'timeline') return;
     const upTo = (a: number[]) => a.map((v, i) => (i <= now ? v : null));
     const series: AreaSeries[] = sources.filter((s) => on[s]).map((s) => ({ key: META[s].key, label: META[s].label, values: upTo(values[s]) }));
     E.areaChart(host, {
@@ -45,7 +51,7 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
       label: `Energy supply by source on ${dayLabel}, 15-minute blocks. Surplus solar is shown above demand. Use arrow keys to move between blocks.`,
       onHover: setRow,
     });
-  }, JSON.stringify([demand, solarUsed, bank, iexUsed, grid, surplus, now, on]));
+  }, JSON.stringify([demand, solarUsed, bank, iexUsed, grid, surplus, now, on, view]));
 
   const i = row ? row.index : now;
   const val = (s: Src) => values[s][i] ?? 0;
@@ -61,8 +67,34 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
   };
   const focus = row?.focus ? (Object.keys(META) as Src[]).find((s) => META[s].key === row.focus) : undefined;
 
+  const seg = (
+    <div className="eg-seg eg-seg--sm ecv-viewseg" role="group" aria-label="Chart view">
+      <button type="button" aria-pressed={view === 'timeline'} onClick={() => setView('timeline')}>Timeline</button>
+      <button type="button" aria-pressed={view === 'tod'} onClick={() => setView('tod')}>ToD</button>
+    </div>
+  );
+
+  if (view === 'tod') {
+    return (
+      <>
+        <div className="ecv-supply__bar">
+          <div className="eg-legend">
+            {sources.map((s) => (
+              <span key={s}><span className={'eg-swatch' + (s === 'surplus' ? ' ecv-swatch-hatch' : '')} data-series={META[s].key} />{META[s].label}</span>
+            ))}
+            <span><span className="eg-swatch eg-swatch--line" />Demand</span>
+          </div>
+          {seg}
+        </div>
+        <TodView dayLabel={dayLabel} tod={tod} now={now} demand={demand} iexKw={iex} iexRate={iexRate} gridRate={gridRate}
+          layers={sources.map((s) => ({ key: s, slot: META[s].key, label: META[s].label, values: values[s], hatch: s === 'surplus' }))} />
+      </>
+    );
+  }
+
   return (
     <>
+      <div className="ecv-supply__bar">
       <div className="eg-row ecv-srcchips" role="group" aria-label="Sources shown">
         {sources.map((s) => (
           <button key={s} type="button" className={'eg-srcchip' + (s === 'surplus' ? ' ecv-srcchip--surplus' : '')} data-series={META[s].key} aria-pressed={on[s]}
@@ -70,6 +102,8 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
             <span className="eg-srcchip__ic"><Ico svg={icons[META[s].icon] ?? ''} /></span>{META[s].label}
           </button>
         ))}
+      </div>
+      {seg}
       </div>
       <div className="eg-readout">
         <div className="eg-readout__when">

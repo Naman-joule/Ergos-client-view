@@ -37,7 +37,9 @@ export interface TodayData {
   solarUsed: number[];             // kW of that solar that met demand: min(solar, demand)
   surplus: number[];               // kW of solar beyond demand: max(0, solar - demand)
   bank: number[];                  // kW drawn back from banked energy (adjusted_discharge, else discharge)
-  iexUsed: number[];               // kW of the IEX purchase that met demand after solar and banking
+  iexUsed: number[];               // kW of the IEX purchase that met demand (settles first)
+  tod: (string | null)[];          // DISCOM ToD period per block: PEAK / NORMAL / OFFPEAK (null when no tariff)
+  gridRate: (number | null)[];     // DISCOM ₹/kWh per block for the plant's voltage level, incl. FPPCA
   iex: number[];                   // kW per block (BUY)
   grid: number[];                  // kW per block, derived: whatever demand solar, banking and IEX didn't meet
   iexRate: (number | null)[];      // landed ₹/kWh per block
@@ -59,6 +61,13 @@ export interface HistoryDay { date: string; demandMwh: number; peakKw: number; i
 
 const zeros = () => new Array<number>(96).fill(0);
 
+/** 'Off-Peak', 'OFF_PEAK', 'offpeak' -> 'OFFPEAK'; 'Peak' -> 'PEAK'; 'Normal' -> 'NORMAL'. */
+export function normaliseTod(v: string | null): string | null {
+  if (!v) return null;
+  const k = v.toUpperCase().replace(/[^A-Z]/g, '');
+  return k || null;
+}
+
 export async function loadToday(q: Query, plantId: number, date: string): Promise<TodayData> {
   const shift = meterShift();
   const isToday = date === istToday();
@@ -69,7 +78,7 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   );
   const plantIds = [plantId, ...mappings.map((m) => m.source_plant_id)];
 
-  const [meter, trades, prebids, banking, histMeter, histIex] = await Promise.all([
+  const [meter, trades, prebids, banking, histMeter, histIex, tariff] = await Promise.all([
     q<{ plant_id: number; block: number; kwh: number }>(BLOCK_SQL, [plantIds, date, shift]),
     q<{ block_no: number; kwh: number; landed: number; mcp: number | null }>(`
       SELECT block_no,
@@ -107,6 +116,14 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
       FROM trading_result_block
       WHERE plant_id = $1 AND date BETWEEN $2::date - 6 AND $2::date AND upper(type_) = 'BUY'
       GROUP BY date`, [plantId, date]),
+    // DISCOM ToD schedule for the plant's month (one row per block; first one wins if states differ)
+    q<{ block: number; tod: string | null; rate: number | null }>(`
+      SELECT DISTINCT ON (t.block) t.block, t.tod_type AS tod,
+             (CASE lower(p.voltage_level) WHEN '132_kv' THEN t.tariff_132_kv WHEN '66_kv' THEN t.tariff_66_kv ELSE t.tariff_33_kv END
+              + coalesce(t.fppca_charge, 0))::float8 AS rate
+      FROM state_grid_discom_tariff t JOIN plant p ON p.plant_id = t.plant_id
+      WHERE t.plant_id = $1 AND t.year = extract(year FROM $2::date)::int AND t.month = extract(month FROM $2::date)::int
+      ORDER BY t.block, t.id`, [plantId, date]),
   ]);
 
   // ---- per-block series
@@ -144,16 +161,17 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   const bankRaw = zeros();
   for (const r of banking) if (r.block >= 1 && r.block <= 96) bankRaw[r.block - 1] += (r.drawn || 0) * 4;
 
-  // Meet demand bottom-up: solar first, then banked energy, then IEX; the grid covers the rest.
-  // Solar beyond demand is surplus and sits above the demand line.
+  // Meet demand bottom-up: the IEX purchase settles first (it is scheduled and paid for), then
+  // solar, then banked energy; the grid covers the rest. Solar beyond what demand still needed
+  // after IEX is surplus and sits above the demand line.
   const solarUsed = zeros(), bank = zeros(), iexUsed = zeros(), grid = zeros(), surplus = zeros();
   for (let i = 0; i <= now; i++) {
     let room = Math.max(0, demand[i]);
+    iexUsed[i] = Math.min(iex[i], room); room -= iexUsed[i];
     solarUsed[i] = Math.min(solar[i], room); room -= solarUsed[i];
     bank[i] = Math.min(bankRaw[i], room); room -= bank[i];
-    iexUsed[i] = Math.min(iex[i], room); room -= iexUsed[i];
     grid[i] = room;
-    surplus[i] = Math.max(0, solar[i] - demand[i]);
+    surplus[i] = Math.max(0, solar[i] - solarUsed[i]);
   }
 
   const upTo = <T,>(a: T[]) => a.slice(0, now + 1);
@@ -201,6 +219,8 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   }
 
   return {
+    tod: (() => { const a: (string | null)[] = new Array(96).fill(null); for (const t of tariff) if (t.block >= 1 && t.block <= 96) a[t.block - 1] = normaliseTod(t.tod); return a; })(),
+    gridRate: (() => { const a: (number | null)[] = new Array(96).fill(null); for (const t of tariff) if (t.block >= 1 && t.block <= 96) a[t.block - 1] = t.rate; return a; })(),
     date, isToday, now, demand, solar, solarUsed, surplus, bank, iex, iexUsed, grid, iexRate, mcp,
     hasSolar: mappings.length > 0,
     totals, landedRate, peak, prebid, banking, history,

@@ -122,10 +122,11 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
 function TodaySupply({ data, plant, title }: Ctx & { title?: string }) {
   return (
     <Card title={<>{title ?? 'Energy supply'} {data.isToday ? <Chip tone="accent"><LiveDot />Live</Chip> : null}</>}
-      sub={`${plant.name} · ${formatDateLong(data.date)} · 96 blocks of 15 minutes · grid is derived · surplus solar sits above demand`}>
+      sub={`${plant.name} · ${formatDateLong(data.date)} · IEX settles first, then solar and banking · grid is derived · surplus solar above demand`}>
       {data.now < 0 ? <Empty title="No meter data for this day yet">The supply chart fills in as readings arrive.</Empty> : (
         <SupplyChart demand={data.demand} solarUsed={data.solarUsed} bank={data.bank} iex={data.iex} iexUsed={data.iexUsed} grid={data.grid}
           surplus={data.surplus} iexRate={data.iexRate} now={data.now} dayLabel={formatWeekday(data.date).replace(',', '')}
+          tod={data.tod} gridRate={data.gridRate}
           icons={iconMap(['solar', 'exchange', 'grid', 'battery'], 13)} />
       )}
     </Card>
