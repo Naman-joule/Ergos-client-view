@@ -33,8 +33,9 @@ function Ico({ svg }: { svg: string }) {
 
 export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surplus, iexRate, now, dayLabel, icons, tod, gridRate }: SupplyProps) {
   const [view, setView] = useState<'timeline' | 'tod'>('timeline');
-  // Stacked under demand: only the part of each source that met demand. Surplus solar sits above.
-  const values: Record<Src, number[]> = { solar: solarUsed, bank, iex: iexUsed, grid, surplus };
+  // IEX is drawn in full (the whole purchase), so where it exceeds demand the purple rises above the
+  // demand line. Solar, banking and grid fill whatever demand IEX left; surplus solar sits on top.
+  const values: Record<Src, number[]> = { solar: solarUsed, bank, iex, grid, surplus };
   const hasIex = iex.some((v, i) => i <= now && v > 0.5);
   const has = (s: Src) => values[s].some((v, i) => i <= now && v > 0.5);
   const sources = ORDER.filter((s) => s === 'grid' || (s === 'iex' ? hasIex : has(s)));
@@ -48,10 +49,10 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
     E.areaChart(host, {
       stacked: true, series, line: { label: 'Demand', values: demand }, now, cursorMax: now,
       height: 340, unit: 'kW', slots: true,
-      label: `Energy supply by source on ${dayLabel}, 15-minute blocks. Surplus solar is shown above demand. Use arrow keys to move between blocks.`,
+      label: `Energy supply by source on ${dayLabel}, 15-minute blocks. The full IEX purchase is shown; where it exceeds demand it rises above the demand line, as does surplus solar. Use arrow keys to move between blocks.`,
       onHover: setRow,
     });
-  }, JSON.stringify([demand, solarUsed, bank, iexUsed, grid, surplus, now, on, view]));
+  }, JSON.stringify([demand, solarUsed, bank, iex, grid, surplus, now, on, view]));
 
   const i = row ? row.index : now;
   const val = (s: Src) => values[s][i] ?? 0;
@@ -60,7 +61,7 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
     solar: val('solar') > 0 ? 'Captive solar' : 'No generation',
     bank: val('bank') > 0 ? 'Drawn from bank' : 'Not drawn',
     iex: (iex[i] ?? 0) <= 0.5 ? 'Not purchased'
-      : (iex[i] ?? 0) - val('iex') > 0.5 ? `${inr(Math.round((iex[i] ?? 0) - val('iex')))} kW not needed`
+      : (iex[i] ?? 0) - (iexUsed[i] ?? 0) > 0.5 ? `${inr(Math.round((iex[i] ?? 0) - (iexUsed[i] ?? 0)))} kW above demand`
       : rate ? `@ ₹${rate.toFixed(2)} / kWh` : 'Cleared',
     grid: 'Derived',
     surplus: val('surplus') > 0 ? 'Beyond demand' : 'None',
