@@ -1,4 +1,5 @@
 import 'server-only';
+import { buyRows } from './exchange';
 import type { Query } from '../db';
 import { parsePrebid, sumCurves } from '../prebid';
 import { addDays, currentBlock, istToday } from '../time';
@@ -119,14 +120,9 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   const [meter, trades, prebids, banking, histMeter, histIex, tariff] = await Promise.all([
     q<{ plant_id: number; block: number; kwh: number }>(BLOCK_SQL, [plantIds, date, shift]),
     q<{ block_no: number; kwh: number; landed: number; mcp: number | null }>(`
-      SELECT block_no,
-             sum(coalesce(cleared_quantity, cleared_quantity_mw * 250))::float8 AS kwh,
-             sum(coalesce(landed_cost, coalesce(cleared_quantity, cleared_quantity_mw * 250) * landed_cost_rs_per_kwh))::float8 AS landed,
-             (sum(CASE WHEN cleared_price > 100 THEN cleared_price / 1000 ELSE cleared_price END
-                  * coalesce(cleared_quantity, cleared_quantity_mw * 250))
-              / nullif(sum(coalesce(cleared_quantity, cleared_quantity_mw * 250)), 0))::float8 AS mcp
-      FROM trading_result_block
-      WHERE plant_id = $1 AND date = $2::date AND upper(type_) = 'BUY'
+      SELECT block_no, sum(kwh)::float8 AS kwh, sum(landed)::float8 AS landed,
+             (sum(mcp * cleared) / nullif(sum(cleared), 0))::float8 AS mcp
+      FROM ${buyRows('b.plant_id = $1 AND b.date = $2::date')} t
       GROUP BY block_no`, [plantId, date]),
     q<{ market_type: string | null; prebid_plan_data: unknown }>(
       `SELECT market_type, prebid_plan_data FROM prebid_plan WHERE plant_id = $1 AND date = $2::date ORDER BY market_type`,
@@ -148,11 +144,8 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
       SELECT d::text AS d, sum(kwh)::float8 AS kwh, (max(kwh) * 4)::float8 AS peak_kw FROM b GROUP BY d`,
       [plantId, date, shift]),
     q<{ d: string; kwh: number; landed: number }>(`
-      SELECT date::text AS d,
-             sum(coalesce(cleared_quantity, cleared_quantity_mw * 250))::float8 AS kwh,
-             sum(coalesce(landed_cost, coalesce(cleared_quantity, cleared_quantity_mw * 250) * landed_cost_rs_per_kwh))::float8 AS landed
-      FROM trading_result_block
-      WHERE plant_id = $1 AND date BETWEEN $2::date - 6 AND $2::date AND upper(type_) = 'BUY'
+      SELECT date::text AS d, sum(kwh)::float8 AS kwh, sum(landed)::float8 AS landed
+      FROM ${buyRows("b.plant_id = $1 AND b.date BETWEEN $2::date - 6 AND $2::date")} t
       GROUP BY date`, [plantId, date]),
     todSchedule(q, plantId, date),
   ]);
