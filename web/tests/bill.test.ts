@@ -44,6 +44,33 @@ test('ToD segments are numbered per type in order; numbered types are kept', () 
   assert.deepEqual([n[0]!.key, n[0]!.todType, n[30]!.key, n[30]!.blocks], ['normal_1', 'normal', 'normal_2', '25-48']);
 });
 
+test('negative FPPCA and duty multiply onto the base rate; master ToD segments keep numbering', () => {
+  // e.g. PVVNL HV-2(A) with FPPCA -1.52% and electricity duty 7.5%
+  const tod = [
+    ...Array(20).fill('off_peak_1'),
+    ...Array(24).fill('normal_1'),
+    ...Array(24).fill('normal_2'),
+    ...Array(24).fill('peak_1'),
+    ...Array(4).fill('off_peak_2'),
+  ];
+  const blocks = tod.map((t, i) => {
+    const base = t.startsWith('off_peak') ? 5.78 : t.startsWith('normal') ? 6.80 : 7.82;
+    return blk({
+      demandKwh: 1000,
+      exchangeKwh: i < 20 ? 200 : 0,
+      exchangeCostRs: i < 20 ? 1000 : 0,
+      gridRate: base * (1 - 1.52 / 100) * (1 + 7.5 / 100),
+      tod: t,
+    });
+  });
+  const d = billDay(blocks);
+  assert.deepEqual(Object.keys(d.segments), ['off_peak_1', 'normal_1', 'normal_2', 'peak_1', 'off_peak_2']);
+  assert.equal(d.segments['off_peak_1']!.blocks, '1-20');
+  assert.equal(d.segments['off_peak_2']!.blocks, '93-96');
+  near(d.gridCostRs, (20 * 800 * 5.78 + 48 * 1000 * 6.80 + 24 * 1000 * 7.82 + 4 * 1000 * 5.78) * 0.9848 * 1.075);
+  assert.equal(d.exchangeCostRs, 20 * 1000);
+});
+
 test('days add up to the month, segment by segment', () => {
   const tod = [...Array(48).fill('OFFPEAK'), ...Array(48).fill('PEAK')];
   const day = (kwh: number) => billDay(tod.map((t) => blk({ demandKwh: kwh, gridRate: t === 'PEAK' ? 9 : 6, tod: t })));

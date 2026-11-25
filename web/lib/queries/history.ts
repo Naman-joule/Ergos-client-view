@@ -218,7 +218,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     for (let i = 0; i <= now; i++) if (demand[i]! > peakKw) { peakKw = demand[i]!; peakBlock = i + 1; }
     const iexKwh = sum(day.iexKwh), iexLandedRs = sum(day.iexLanded);
     const bill = billDay(day.demandKwh.map((kwh, i) => ({
-      hasMeter: day.hasMeter[i]!, demandKwh: kwh, solarKwh: day.solarKwh[i]!, exchangeKwh: day.iexKwh[i]!, exchangeCostRs: day.iexLanded[i]!,
+      hasMeter: day.hasMeter[i]! && i <= now, demandKwh: kwh, solarKwh: day.solarKwh[i]!, exchangeKwh: day.iexKwh[i]!, exchangeCostRs: day.iexLanded[i]!,
       chargeKwh: day.chargeKwh[i]!, adjDischargeKwh: day.bankKw[i]! / 4, dischargeKwh: day.dischargeKwh[i]!,
       gridRate: day.gridRate[i] ?? null, solarRate: day.solarRate[i] ?? null, tod: day.todRaw[i] ?? null,
     })));
