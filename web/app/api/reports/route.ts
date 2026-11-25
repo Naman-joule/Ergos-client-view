@@ -3,7 +3,8 @@ import { Client } from 'basic-ftp';
 import { currentUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
 import { statementFilePath } from '@/lib/queries/savings';
-import { REPORT_KINDS, ftpSettings, isReportKind, locateReport, reportFileName } from '@/lib/reports';
+import { REPORT_KINDS, ftpSettings, isReportKind, locateReport, pickCovering, reportFileName } from '@/lib/reports';
+import path from 'node:path/posix';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,16 +47,26 @@ export async function GET(req: Request) {
     const s = ftpSettings();
     await client.access({ host: s.host, port: s.port, user: s.user, password: s.password, secure: s.secure,
       secureOptions: s.secure ? { servername: s.host } : undefined });
+    let file = loc.path;
     let size: number | null = null;
-    try { size = await client.size(loc.path); } catch { client.close(); return text(404, `The ${spec.label} file for this day is missing on the report server.`); }
+    try { size = await client.size(file); } catch {
+      // ergOS replaces period files as the month goes on (…_01-Oct_to_29-Oct.xlsx -> …_01-Oct_to_31-Oct.xlsx):
+      // serve the current file of the same kind and client that covers this day, from the same folder.
+      const dir = path.dirname(file);
+      const names = await client.list(dir).then((l) => l.filter((e) => e.isFile).map((e) => e.name)).catch(() => [] as string[]);
+      const alt = pickCovering(names, file, date);
+      if (!alt) { client.close(); return text(404, `The ${spec.label} file for this day is no longer on the report server.`); }
+      file = path.join(dir, alt);
+      try { size = await client.size(file); } catch { size = null; }
+    }
 
     const body = new PassThrough();
-    client.downloadTo(body, loc.path)
+    client.downloadTo(body, file)
       .then(() => body.end())
       .catch((e: Error) => { console.error('reports: download failed:', e.message); body.destroy(e); })
       .finally(() => client.close());
 
-    const name = reportFileName(loc.path, `${date}-${kind}`);
+    const name = reportFileName(file, `${date}-${kind}`);
     return new Response(Readable.toWeb(body) as ReadableStream, {
       headers: {
         'Content-Type': spec.type,

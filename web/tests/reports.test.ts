@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { locateReport, reportFileName, ftpSettings } from '../lib/report-path.ts';
+import { locateReport, reportFileName, ftpSettings, pickCovering } from '../lib/report-path.ts';
 
 const env = (e: Record<string, string>) => ({ REPORTS_FTP_URL: 'ftp://ro:pw@reports.example:21/', ...e }) as unknown as NodeJS.ProcessEnv;
 
@@ -34,4 +34,25 @@ test('no escaping the reports folder', () => {
 test('file names and settings', () => {
   assert.equal(reportFileName('/r/Savings "Oct" 22.xlsx', 'x'), 'Savings _Oct_ 22.xlsx');
   assert.deepEqual(ftpSettings('ftps://user:p%40ss@h.example:990/'), { host: 'h.example', port: 990, user: 'user', password: 'p@ss', secure: true });
+});
+
+test('local:// paths from older ergOS rows map to the FTP folder', () => {
+  assert.deepEqual(locateReport('local://tod_savings/excel/A_01-Oct-2026_to_29-Oct-2026.xlsx', env({})),
+    { via: 'ftp', path: '/tod_savings/excel/A_01-Oct-2026_to_29-Oct-2026.xlsx' });
+  assert.deepEqual(locateReport('ftp://122.186.70.126:21/tod_savings/pdf/IEX_Trade_Report_Haldiram_23-Nov-2026.pdf', env({ REPORTS_FTP_ROOT: '/tod_savings' })),
+    { via: 'ftp', path: '/tod_savings/pdf/IEX_Trade_Report_Haldiram_23-Nov-2026.pdf' });
+});
+
+test('a replaced period file is found by the range that covers the day', () => {
+  const folder = [
+    'ToD_Savings_Calculations_IEX_Bharatiyam_20-Nov-2026_to_23-Nov-2026.xlsx',
+    'ToD_Savings_Calculations_IEX_HALDIRAM_01-Oct-2026_to_31-Oct-2026.xlsx',
+    'ToD_Savings_Calculations_IEX_Haldiram_01-Nov-2026_to_23-Nov-2026.xlsx',
+  ];
+  const old = '/tod_savings/excel/ToD_Savings_Calculations_IEX_HALDIRAM_01-Oct-2026_to_29-Oct-2026.xlsx';
+  assert.equal(pickCovering(folder, old, '2026-10-29'), 'ToD_Savings_Calculations_IEX_HALDIRAM_01-Oct-2026_to_31-Oct-2026.xlsx');
+  assert.equal(pickCovering(folder, '/x/ToD_Savings_Calculations_IEX_Haldiram_01-Nov-2026_to_14-Nov-2026.xlsx', '2026-11-10'),
+    'ToD_Savings_Calculations_IEX_Haldiram_01-Nov-2026_to_23-Nov-2026.xlsx');
+  assert.equal(pickCovering(folder, old, '2026-12-01'), null);                       // nothing covers it
+  assert.equal(pickCovering(['IEX_Trade_Report_HALDIRAM_30-Oct-2026.pdf'], '/p/IEX_Trade_Report_HALDIRAM_29-Oct-2026.pdf', '2026-10-29'), null);
 });

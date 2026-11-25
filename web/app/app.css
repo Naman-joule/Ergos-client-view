@@ -368,3 +368,6 @@
 /* sheets column stays in view when the table scrolls sideways */
 .ecv-table .ecv-sticky-end { position: sticky; right: 0; z-index: 1; background: var(--surface); box-shadow: -10px 0 12px -10px rgba(0,0,0,.35); }
 .ecv-table td .eg-chip--warning { height: 20px; font-size: 11px; padding: 0 7px; margin-left: 6px; vertical-align: middle; }
+.ecv-sheets--period { flex-wrap: wrap; gap: 8px; }
+.ecv-sheets--period .ecv-sheet { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.ecv-sheet--docx { border-color: color-mix(in srgb, var(--c-iex) 45%, var(--line)); }
