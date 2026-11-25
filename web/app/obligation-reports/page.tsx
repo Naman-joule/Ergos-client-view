@@ -34,6 +34,9 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
     const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
+    // Before migration 009 runs, the table doesn't exist: say so instead of failing the page.
+    const [{ ready }] = await q<{ ready: boolean }>(`SELECT to_regclass('public.iex_obligation_report') IS NOT NULL AS ready`);
+    if (!ready) return { scope, sel, lag, missing: true } as const;
     const months = await obligationMonths(q, sel.plant.plant_id);
     // ?month=YYYY-MM, else the newest month with reports, else this month
     const month = asked && /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : months[0]?.month ?? today.slice(0, 7);
@@ -45,6 +48,15 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
     return (
       <Shell user={user} page="obligation" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
         <Empty title="No plants are assigned to your account yet" icon="factory">Ask your Joulewise contact to map your plants.</Empty>
+      </Shell>
+    );
+  }
+  if ('missing' in view) {
+    return (
+      <Shell user={user} page="obligation" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
+        <Empty title="Obligation reports aren’t set up in the database yet" icon="file">
+          Run db/migrations/009_obligation_reports.sql in the Supabase SQL editor, then reload this page.
+        </Empty>
       </Shell>
     );
   }
