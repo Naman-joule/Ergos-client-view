@@ -641,3 +641,18 @@ body { font-variant-numeric: tabular-nums; }
   .ecv-stick__controls .ecv-modes a { height: 32px; padding: 0 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .ecv-stick__bar { transition: none; } }
+
+/* ---- Plant load report ---- */
+.ecv-load__source { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.ecv-load__source b { color: var(--ink); font-weight: 500; }
+.ecv-load__wrap { max-height: min(70vh, 900px); overflow: auto; }
+.ecv-load thead th { position: sticky; top: 0; z-index: 1; }
+.ecv-load tfoot th { position: sticky; bottom: 0; background: var(--surface-2); font-weight: 600; }
+.ecv-load td, .ecv-load th { padding: 7px 12px; }
+.ecv-load tr.is-missing td { color: var(--ink-muted); }
+.ecv-load tr.is-max td { font-weight: 600; }
+.ecv-load__flag { display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill); font-size: 11px; border: 1px solid var(--line); white-space: nowrap; }
+.ecv-load__flag--real { color: var(--ink-muted); }
+.ecv-load__flag--filled { background: var(--warning-soft); color: var(--ink); }
+.ecv-load__flag--missing { background: var(--negative-soft); color: var(--ink); }
+@media (max-width: 599px) { .ecv-load { min-width: 640px; } }

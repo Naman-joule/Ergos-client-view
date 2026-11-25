@@ -8,8 +8,8 @@ import { blockEnd } from '@/lib/time';
 import type { SessionUser } from '@/lib/auth';
 import { ago, timeState } from '@/lib/time-state';
 
-export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports';
-const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'Obligation reports' };
+export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports' | 'load';
+const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'Obligation reports', load: 'Plant load report' };
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('') || '·';
@@ -20,7 +20,7 @@ function initials(name: string) {
  *   laptop ≥ 1180  sidebar with labels
  *   tablet 600–1179  72 px icon rail
  *   phone ≤ 599  bottom tab bar in thumb reach
- * Five destinations: Energy, Savings, Billing, IEX prices, Obligation reports.
+ * Five destinations: Energy, Savings, Billing, IEX prices, Reports (plant load, IEX obligation).
  * The top bar carries the page title and ONE time badge (live / delayed / stale). A stale sync also opens the
  * reserved notice slot under the top bar; the slot is always in the layout, so nothing below it moves.
  */
@@ -35,7 +35,9 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
     { page: 'savings', href: '/savings', icon: 'rupee', label: 'Savings', show: user.permissions.has('view_savings') },
     { page: 'billing', href: '/billing', icon: 'receipt', label: 'Billing', show: user.permissions.has('view_billing') },
     { page: 'prices', href: '/market/prices', icon: 'antenna', label: 'IEX prices', show: user.permissions.has('view_iex') },
-    { page: 'reports', href: '/market/reports', icon: 'file', label: 'Reports', show: user.permissions.has('view_iex') },
+    // Reports: the plant load report (meter data) and IEX obligation reports, each behind its own permission
+    { page: 'reports', href: user.permissions.has('view_today') ? '/reports/plant-load' : '/market/reports', icon: 'file', label: 'Reports',
+      show: user.permissions.has('view_today') || user.permissions.has('view_iex') },
   ];
   const badge = state === 'live'
     ? { text: `Live · ${blockEnd(liveBlock)}`, title: `Current block B${liveBlock}, ending ${blockEnd(liveBlock)} IST. Data synced ${syncLag != null ? ago(syncLag) : ''}.` }
@@ -51,7 +53,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
         </div>
         <nav className="eg-nav ecv-nav" aria-label="Main">
           {items.filter((i) => i.show).map((i) => (
-            <Link key={i.page} className="eg-nav__item ecv-nav__item" href={i.href} aria-current={page === i.page ? 'page' : undefined} title={i.label}>
+            <Link key={i.page} className="eg-nav__item ecv-nav__item" href={i.href} aria-current={page === i.page || (page === 'load' && i.page === 'reports') ? 'page' : undefined} title={i.label}>
               <Icon name={i.icon} size={19} /><span className="ecv-nav__label">{i.label}</span>
             </Link>
           ))}
