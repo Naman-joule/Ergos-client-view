@@ -1,0 +1,60 @@
+# One-off full re-sync: re-copies every plant's history from ergOS, so past months match what ergOS holds now
+# (savings statements recalculated after the 120-day savings window, trades, banking and meter readings).
+# Copies real ergOS rows only; nothing is generated.
+#
+# Steps run one after another (init containers), each in its own transaction: if a step fails, that table is
+# left exactly as it was and the steps after it don't run. While a step runs, the 15-minute sync skips (lock).
+#
+#   kubectl -n ergos-view delete job ergos-view-resync --ignore-not-found
+#   kubectl -n ergos-view apply -f sync/k8s/resync-all-job.yaml
+#   kubectl -n ergos-view logs -f job/ergos-view-resync --all-containers --prefix
+#
+# RESYNC_DAYS below: how far back to re-copy (730 = two years). Rows older than that are left untouched.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ergos-view-resync
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+      initContainers:
+        # clients, plants, mappings, open-access charges and tariffs (upsert / replace)
+        - name: tariffs
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "slow"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
+        # daily savings statements (the Savings sheet)
+        - name: savings
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "fast", "--tables", "iex_tod_daily_obligation", "--backfill-days", "730"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
+        # IEX trades: headers first, then their blocks (same run, so every block has its header)
+        - name: trades
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "fast", "--tables", "trading_result,trading_result_block", "--backfill-days", "730"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
+        - name: banking
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "fast", "--tables", "banking", "--backfill-days", "730"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
+      containers:
+        # meter readings last: the largest table
+        - name: meter
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "fast", "--tables", "plant_processed_meter_data", "--backfill-days", "730"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
