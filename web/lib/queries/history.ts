@@ -74,6 +74,7 @@ export interface HistoryData {
   tod: RunStats[];                // ToD periods summed over the range
   todDays: number;                // days that went into the ToD stats
   blocks?: HistoryBlock[];        // with { detail: true }
+  todByMonth?: Record<string, { runs: RunStats[]; days: number }>;   // with { todByMonth: true }: YYYY-MM -> that month's ToD periods
   todByDay?: HistoryTodRow[];     // with { detail: true }: each day's ToD periods, then the all-days rows
   hasSolar: boolean;
   hasBank: boolean;
@@ -82,7 +83,7 @@ export interface HistoryData {
 const z = () => new Array<number>(96).fill(0);
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
-export async function loadHistory(q: Query, plantId: number, period: HistoryPeriod, opts: { detail?: boolean } = {}): Promise<HistoryData> {
+export async function loadHistory(q: Query, plantId: number, period: HistoryPeriod, opts: { detail?: boolean; todByMonth?: boolean } = {}): Promise<HistoryData> {
   const { from, to } = period;
   const shift = meterShift();
   const today = istToday();
@@ -256,6 +257,17 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   };
 
   const tod = layout ? rangeRunStats(todInputs, layout) : [];
+  let todByMonth: HistoryData['todByMonth'];
+  if (opts.todByMonth) {
+    todByMonth = {};
+    const months = [...new Set(todDates.map((d) => d.slice(0, 7)))];
+    for (const m of months) {
+      const idx = todDates.map((d, k) => (d.startsWith(m) ? k : -1)).filter((k) => k >= 0);
+      const inputs = idx.map((k) => todInputs[k]!);
+      const last = inputs[inputs.length - 1]!;                       // the month's latest schedule sets the periods
+      todByMonth[m] = { runs: rangeRunStats(inputs, { tod: last.tod, gridRate: last.gridRate }), days: inputs.length };
+    }
+  }
   let todByDay: HistoryTodRow[] | undefined;
   if (opts.detail && layout) {
     const lay = layout;
@@ -265,7 +277,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
 
   return {
     period, days, totals, series,
-    tod, todDays: todInputs.length, blocks, todByDay,
+    tod, todDays: todInputs.length, blocks, todByDay, todByMonth,
     hasSolar: mappings.length > 0,
     hasBank: totals.bankKwh > 0,
   };

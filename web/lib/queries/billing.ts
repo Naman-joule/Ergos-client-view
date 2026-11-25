@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Query } from '../db';
 import { addDays, istToday } from '../time';
-import { loadHistory, type HistoryDay } from './history';
+import { loadHistory, type HistoryData, type HistoryDay } from './history';
 
 // Billing & costing: a plant's energy and energy cost per calendar month, built from the same per-block
 // computation as History and Today (lib/supply.ts allocation, DISCOM ToD rates), so the numbers agree.
@@ -32,6 +32,7 @@ export interface BillingData {
   from: string; to: string; months: BillMonth[];   // newest first
   total: Omit<BillMonth, 'month' | 'partial' | 'daysInRange'> & { months: number };
   days: HistoryDay[];
+  todByMonth: NonNullable<HistoryData['todByMonth']>;
 }
 
 function monthStart(ymd: string, back: number): string {
@@ -59,7 +60,7 @@ function roll(days: HistoryDay[]): Omit<BillMonth, 'month' | 'partial' | 'daysIn
 export async function loadBilling(q: Query, plantId: number, months: BillingMonths): Promise<BillingData> {
   const to = istToday();
   const from = monthStart(to, months - 1);
-  const h = await loadHistory(q, plantId, { from, to, preset: null, clamped: false });
+  const h = await loadHistory(q, plantId, { from, to, preset: null, clamped: false }, { todByMonth: true });
   const byMonth = new Map<string, HistoryDay[]>();
   for (const d of h.days) {
     const m = d.date.slice(0, 7);
@@ -70,5 +71,5 @@ export async function loadBilling(q: Query, plantId: number, months: BillingMont
     const monthEnd = addDays(last.slice(0, 8) + '01', -1);
     return { month, ...roll(days), daysInRange: days.length, partial: to < monthEnd || days.length < Number(monthEnd.slice(8)) };
   }).reverse();
-  return { from, to, months: out, total: { ...roll(h.days), months: out.length }, days: h.days };
+  return { from, to, months: out, total: { ...roll(h.days), months: out.length }, days: h.days, todByMonth: h.todByMonth ?? {} };
 }

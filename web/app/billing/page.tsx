@@ -5,7 +5,7 @@ import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { BILLING_MONTH_CHOICES, loadBilling, resolveBillingMonths, type BillMonth } from '@/lib/queries/billing';
 import { loadSpec } from '@/lib/dashboard/load';
-import { currentBlock, formatRange } from '@/lib/time';
+import { currentBlock, formatDate, formatRange } from '@/lib/time';
 import { inr, mwhValue, rupees } from '@/lib/format';
 import { href, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
@@ -16,6 +16,8 @@ import { Chip } from '@/components/ui/Chip';
 import { Empty, Notice } from '@/components/ui/Empty';
 import { Icon } from '@/components/ui/Icon';
 import { StatTile } from '@/components/ui/StatTile';
+import { CostColumns, type CostColumn } from '@/components/charts/BillCharts';
+import { BillBreakdown } from '@/components/widgets/billing/BillBreakdown';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Billing & costing' };
@@ -49,6 +51,26 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const t = data.total;
   const range = formatRange(data.from, data.to);
   const unpriced = data.months.reduce((s, m) => s + m.gridUnpricedKwh, 0);
+
+  // selected month: ?month=YYYY-MM, else the newest month with data
+  const withData = data.months.filter((m) => m.daysWithData > 0);
+  const sel_m = withData.find((m) => m.month === sp.month) ?? withData[0] ?? null;
+  const monthHref = (month: string) => href('/billing', { client: sel.client.client_id, plant: sel.plant.plant_id, months, month }) + '#bill-month';
+  const parts = (iex: number, iexKwh: number, grid: number, gridKwh: number, solar: number, solarKwh: number) => [
+    { key: 'iex', label: 'Power exchange', slot: 'iex', value: iex, kwh: iexKwh },
+    { key: 'grid', label: 'Grid', slot: 'grid', value: grid, kwh: gridKwh },
+    { key: 'solar', label: 'Solar', slot: 'solar', value: solar, kwh: solarKwh },
+  ];
+  const monthCols: CostColumn[] = [...data.months].reverse().map((m) => ({
+    id: m.month, label: monthLabel(m.month).replace(/ (\d{2})(\d{2})$/, " '$2"), title: `${monthLabel(m.month)}${m.partial ? ` · ${m.daysWithData} days so far` : ''}`,
+    parts: parts(m.iexCostRs, m.iexKwh, m.gridCostRs, m.gridKwh, m.solarCostRs, m.solarUsedKwh),
+    rate: m.avgRate, demandKwh: m.demandKwh, href: m.daysWithData ? monthHref(m.month) : undefined, empty: !m.daysWithData,
+  }));
+  const dayCols: CostColumn[] = sel_m ? data.days.filter((d) => d.date.startsWith(sel_m.month)).map((d) => ({
+    id: d.date, label: String(Number(d.date.slice(8))), title: formatDate(d.date),
+    parts: parts(d.iexLandedRs, d.iexKwh, d.gridCostRs, d.gridKwh, d.solarCostRs, d.solarUsedKwh),
+    rate: d.demandKwh ? d.totalCostRs / d.demandKwh : null, demandKwh: d.demandKwh, empty: !d.blocks,
+  })) : [];
 
   return (
     <Shell user={user} page="billing" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
@@ -88,6 +110,40 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             </div>
           </div>
         </WidgetCell>
+
+        <WidgetCell span="full" type="billing.timeline">
+          <Card title="Bill over time" sub={`${sel.plant.name} · energy cost per month by source, with the average ₹/kWh · click a month to see how it’s calculated`}
+            actions={<div className="eg-legend">
+              <span><span className="eg-swatch" data-series="iex" />Power exchange</span><span><span className="eg-swatch" data-series="grid" />Grid</span>
+              <span><span className="eg-swatch" data-series="solar" />Solar</span><span><span className="eg-swatch ecv-bill__rateswatch" />Average ₹/kWh</span>
+            </div>}>
+            <CostColumns columns={monthCols} selected={sel_m?.month} aria={`Monthly energy cost by source, ${range}`} clickHint="opens the month" />
+          </Card>
+        </WidgetCell>
+
+        {sel_m ? (
+          <WidgetCell span="full" type="billing.breakdown">
+            <div id="bill-month" />
+            <Card title={`How the ${monthLabel(sel_m.month)} bill is calculated`}
+              sub={`${sel.plant.name} · ${sel_m.daysWithData} day${sel_m.daysWithData === 1 ? '' : 's'} with data${sel_m.partial ? ' (month to date)' : ''} · energy × rate = cost, for each source`}
+              actions={withData.length > 1 ? (
+                <form method="get" action="/billing" className="eg-seg eg-seg--sm" role="group" aria-label="Month">
+                  <input type="hidden" name="client" value={sel.client.client_id} /><input type="hidden" name="plant" value={sel.plant.plant_id} />
+                  <input type="hidden" name="months" value={months} />
+                  {[...withData].reverse().slice(-6).map((m) => <button key={m.month} type="submit" name="month" value={m.month} aria-pressed={m.month === sel_m.month}>{monthLabel(m.month)}</button>)}
+                </form>) : undefined}>
+              <BillBreakdown m={sel_m} runs={data.todByMonth[sel_m.month]?.runs} monthLabel={monthLabel(sel_m.month)} />
+            </Card>
+          </WidgetCell>
+        ) : null}
+
+        {sel_m && dayCols.length ? (
+          <WidgetCell span="full" type="billing.days">
+            <Card title={`${monthLabel(sel_m.month)} day by day`} sub="Energy cost per day by source, with the day’s average ₹/kWh · hover a day for its numbers">
+              <CostColumns columns={dayCols} aria={`Daily energy cost, ${monthLabel(sel_m.month)}`} lineLabel="Day’s average ₹/kWh" />
+            </Card>
+          </WidgetCell>
+        ) : null}
 
         <WidgetCell span="full" type="billing.months">
           <Card title="Monthly bill summary"
