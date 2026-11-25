@@ -2,6 +2,7 @@ import 'server-only';
 import type { Query } from '../db';
 import { parsePrebid, sumCurves } from '../prebid';
 import { addDays, currentBlock, istToday } from '../time';
+import { allocate } from '../supply';
 
 /** 15 minutes when meter_timestamp marks the end of the interval (default), 0 when it marks the start. */
 export function meterShift(): string {
@@ -191,18 +192,8 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   const bankRaw = zeros();
   for (const r of banking) if (r.block >= 1 && r.block <= 96) bankRaw[r.block - 1] += (r.drawn || 0) * 4;
 
-  // Meet demand bottom-up: the IEX purchase settles first (it is scheduled and paid for), then
-  // solar, then banked energy; the grid covers the rest. Solar beyond what demand still needed
-  // after IEX is surplus and sits above the demand line.
-  const solarUsed = zeros(), bank = zeros(), iexUsed = zeros(), grid = zeros(), surplus = zeros();
-  for (let i = 0; i <= now; i++) {
-    let room = Math.max(0, demand[i]);
-    iexUsed[i] = Math.min(iex[i], room); room -= iexUsed[i];
-    solarUsed[i] = Math.min(solar[i], room); room -= solarUsed[i];
-    bank[i] = Math.min(bankRaw[i], room); room -= bank[i];
-    grid[i] = room;
-    surplus[i] = Math.max(0, solar[i] - solarUsed[i]);
-  }
+  // Meet demand bottom-up (IEX first, then solar, banking, grid): see lib/supply.ts, shared with History.
+  const { solarUsed, bank, iexUsed, grid, surplus } = allocate(demand, iex, solar, bankRaw, now);
 
   const upTo = <T,>(a: T[]) => a.slice(0, now + 1);
   const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);

@@ -59,8 +59,13 @@ export interface RunStats extends TodRun {
 
 /** Energy (MWh), rates and cost per run, counting only blocks up to `now`. */
 export function runStats(input: TodInput): RunStats[] {
-  const { tod, now, demand, layers, iexRate, gridRate, solarRate } = input;
-  return todRuns(tod, gridRate).map((run) => {
+  return statsForRuns(todRuns(input.tod, input.gridRate), input);
+}
+
+/** Stats for given runs (a layout), so several days can be measured against the same periods. */
+function statsForRuns(runs: TodRun[], input: TodInput): RunStats[] {
+  const { now, demand, layers, iexRate, gridRate, solarRate } = input;
+  return runs.map((run) => {
     const done: number[] = [];
     for (let i = run.start; i <= Math.min(run.end, now); i++) done.push(i);
     const mwh = (a: number[]) => done.reduce((s, i) => s + (a[i] || 0), 0) / 4 / 1000;
@@ -96,5 +101,41 @@ export function runStats(input: TodInput): RunStats[] {
       demand: d, parts, supply, cost, pricedMwh, avgPrice: pricedMwh ? cost / (pricedMwh * 1000) : null,
       balance, future: run.start > now,
     };
+  });
+}
+
+/**
+ * ToD stats summed over several days (History). Every day is measured against the same period layout
+ * (`layout`: usually the latest day's schedule), each with its own block rates, then summed per period:
+ * energy and cost add up; rates, average price and balance are recomputed from the sums. `blocksDone`
+ * becomes the number of day-blocks with data, so average kW stays correct over the range.
+ */
+export function rangeRunStats(days: TodInput[], layout: { tod: (string | null)[]; gridRate?: (number | null)[] }): RunStats[] {
+  const runs = todRuns(layout.tod, layout.gridRate);
+  if (!runs.length || !days.length) return [];
+  const per = days.map((d) => statsForRuns(runs, d));
+  return runs.map((_, ri) => {
+    const rs = per.map((p) => p[ri]!);
+    const first = rs[0]!;
+    const parts: RunPart[] = first.parts.map((p0, pi) => {
+      let mwh = 0, cost: number | null = null, pricedMwh = 0;
+      for (const r of rs) {
+        const p = r.parts[pi]!;
+        mwh += p.mwh;
+        if (p.cost != null) { cost = (cost ?? 0) + p.cost; if (p.rate) pricedMwh += p.cost / p.rate / 1000; }
+      }
+      return { ...p0, mwh, cost, rate: cost != null && pricedMwh ? cost / (pricedMwh * 1000) : null };
+    });
+    const demand = rs.reduce((s, r) => s + r.demand, 0);
+    const blocksDone = rs.reduce((s, r) => s + r.blocksDone, 0);
+    const supply = parts.filter((p) => p.key !== 'surplus').reduce((s, p) => s + p.mwh, 0);
+    const cost = parts.reduce((s, p) => s + (p.cost ?? 0), 0);
+    const pricedMwh = parts.reduce((s, p) => s + (p.cost != null && p.rate ? p.cost / p.rate / 1000 : 0), 0);
+    const gap = supply - demand;
+    const balance: RunStats['balance'] = !blocksDone ? { kind: 'none', mwh: 0 }
+      : Math.abs(gap) <= Math.max(0.001, demand * 0.01) ? { kind: 'balanced', mwh: 0 }
+      : gap > 0 ? { kind: 'excess', mwh: gap } : { kind: 'short', mwh: -gap };
+    return { ...first, parts, demand, blocksDone, supply, cost, pricedMwh,
+             avgPrice: pricedMwh ? cost / (pricedMwh * 1000) : null, balance, future: blocksDone === 0 };
   });
 }

@@ -21,7 +21,7 @@ function syncLabel(m: number | null) {
 }
 
 export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
-  user: SessionUser; page: 'today' | 'savings'; liveBlock: number; syncLag: number | null;
+  user: SessionUser; page: 'today' | 'savings' | 'history'; liveBlock: number; syncLag: number | null;
   themeMode: 'dark' | 'light'; children: ReactNode;
 }) {
   const stale = syncLag === null || syncLag > SYNC_STALE_MINUTES;
@@ -45,6 +45,11 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
               <Icon name="rupee" size={19} />Savings
             </Link>
           )}
+          {user.permissions.has('view_today') && (
+            <Link className="eg-nav__item" href="/history" aria-current={page === 'history' ? 'page' : undefined}>
+              <Icon name="bars" size={19} />History
+            </Link>
+          )}
           <div className="eg-overline eg-nav__group">Coming next</div>
           <span className="eg-nav__item ecv-nav-soon" aria-disabled="true"><Icon name="antenna" size={19} />IEX prices</span>
           <span className="eg-nav__item ecv-nav-soon" aria-disabled="true"><Icon name="receipt" size={19} />Billing</span>
@@ -53,7 +58,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
       </aside>
       <main className="eg-main">
         <header className="eg-topbar">
-          <div className="eg-crumbs">Dashboard <Icon name="chevron-right" size={14} /> <b>{page === 'today' ? 'Today' : 'Savings'}</b></div>
+          <div className="eg-crumbs">Dashboard <Icon name="chevron-right" size={14} /> <b>{page === 'today' ? 'Today' : page === 'history' ? 'History' : 'Savings'}</b></div>
           <div className="eg-topbar__end">
             <Chip lg><LiveDot />Live · {blockLabel(liveBlock)}</Chip>
             <Chip lg tone={stale ? 'warning' : 'default'} title="Data is copied from ergOS every 15 minutes">

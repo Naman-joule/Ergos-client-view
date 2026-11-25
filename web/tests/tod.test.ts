@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ranges, runStats, todName, todRuns } from '../lib/tod.ts';
+import { rangeRunStats, ranges, runStats, todName, todRuns } from '../lib/tod.ts';
 
 const seq = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 // Off-peak 00:00–05:00, Normal 05:00–17:00, Peak 17:00–23:00, Off-peak 23:00–24:00
@@ -71,4 +71,22 @@ test('todRuns keeps separately numbered or priced periods apart', () => {
   assert.equal(todRuns(numbered).length, 5);
   assert.equal(todName('NORMAL2'), 'Normal');
   assert.equal(todName('OFFPEAK1'), 'Off-peak');
+});
+
+test('rangeRunStats sums days against one layout, each at its own rates', () => {
+  const tod = Array.from({ length: 96 }, (_, i) => (i < 48 ? 'OFFPEAK' : 'PEAK'));
+  const day = (kw: number, rate: number) => ({
+    tod, now: 95, demand: new Array(96).fill(kw), iexRate: new Array(96).fill(null), gridRate: new Array(96).fill(rate),
+    layers: [{ key: 'grid', slot: 'grid', label: 'Grid', values: new Array(96).fill(kw) }],
+  });
+  const r = rangeRunStats([day(1000, 5), day(3000, 7)], { tod, gridRate: new Array(96).fill(5) });
+  assert.equal(r.length, 2);
+  const off = r[0]!;
+  // 12 h at 1000 kW + 12 h at 3000 kW = 12 + 36 MWh
+  assert.equal(Math.round(off.demand), 48);
+  assert.equal(Math.round(off.parts[0]!.mwh), 48);
+  assert.equal(Math.round(off.cost), 12000 * 5 + 36000 * 7);
+  assert.equal(off.parts[0]!.rate!.toFixed(4), ((12000 * 5 + 36000 * 7) / 48000).toFixed(4));
+  assert.equal(off.blocksDone, 96);           // 48 blocks x 2 days
+  assert.equal(off.balance.kind, 'balanced');
 });

@@ -35,8 +35,15 @@ function note(part: RunStats['parts'][number]): string {
   return part.rate != null ? `@ ₹${part.rate.toFixed(2)}/kWh` : part.key === 'solar' ? 'captive' : '—';
 }
 
-export function TodView(input: TodInput & { dayLabel: string; date: string; isToday: boolean; source?: TodSourceInfo | null }) {
-  const runs = useMemo(() => runStats(input), [input]);
+type TodViewProps = { dayLabel: string; date: string; isToday: boolean; source?: TodSourceInfo | null } & (
+  | (TodInput & { runs?: undefined; days?: undefined })
+  // History: stats already summed over `days` days (lib/tod rangeRunStats)
+  | { runs: RunStats[]; days: number; now?: undefined }
+);
+
+export function TodView(input: TodViewProps) {
+  const runs = useMemo(() => input.runs ?? runStats(input as TodInput), [input]);
+  const days = input.days ?? 1;
   const [hover, setHover] = useState<number | null>(null);
   const [pinned, setPinned] = useState<number | null>(null);
 
@@ -50,7 +57,7 @@ export function TodView(input: TodInput & { dayLabel: string; date: string; isTo
   }
 
   // default: the run in progress today, else the run with the most demand
-  const live = input.isToday ? runs.findIndex((r) => r.start <= input.now && input.now <= r.end) : -1;
+  const live = input.isToday && input.now != null ? runs.findIndex((r) => r.start <= input.now! && input.now! <= r.end) : -1;
   const biggest = runs.reduce((bi, r, i) => (r.demand > runs[bi]!.demand ? i : bi), 0);
   const activeIdx = hover ?? pinned ?? (live >= 0 ? live : biggest);
   const active = runs[activeIdx]!;
@@ -78,7 +85,7 @@ export function TodView(input: TodInput & { dayLabel: string; date: string; isTo
       <div className="eg-readout ecv-tod__readout" aria-live="polite">
         <div className="eg-readout__when">
           <b>{active.label} · {active.from}–{active.to}</b>
-          <span>{inr(active.hours, active.hours % 1 ? 2 : 0)} h · {active.blocks} blocks{active.blocksDone < active.blocks && !active.future ? ` · ${active.blocksDone} so far` : ''}{active.future ? ' · not started' : ''}{pinned === activeIdx ? ' · pinned' : ''}</span>
+          <span>{inr(active.hours, active.hours % 1 ? 2 : 0)} h · {active.blocks} blocks{days > 1 ? ` · ${days} days` : ''}{days === 1 && active.blocksDone < active.blocks && !active.future ? ` · ${active.blocksDone} so far` : ''}{active.future ? ' · not started' : ''}{pinned === activeIdx ? ' · pinned' : ''}</span>
           {pinned !== null ? <button type="button" className="ecv-tod__unpin" onClick={() => setPinned(null)} aria-label="Unpin period">×</button> : null}
         </div>
         <div className="eg-readout__items">
