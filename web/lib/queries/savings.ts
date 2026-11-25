@@ -44,6 +44,8 @@ export interface SavingsRow {
   is_locked: boolean;
   /** true when ergOS had no grid benchmark for the day and the client view estimated it (see estimateBenchmarks) */
   benchmark_estimated?: boolean;
+  /** how the missing benchmark was filled: implied from ergOS's own savings, or estimated from the DISCOM tariff */
+  benchmark_source?: 'implied' | 'tariff';
 }
 
 export const CHARGE_COLUMNS = [
@@ -62,7 +64,7 @@ export type ChargeKey = (typeof CHARGE_COLUMNS)[number][0];
 export interface SavingsTotals {
   volumeKwh: number; iexCost: number; gridCost: number; savings: number;
   landedRate: number | null; benchmarkRate: number | null; percentBelow: number | null;
-  tradeDays: number; best: SavingsRow | null; negativeDays: number; allLocked: boolean; estimatedDays: number;
+  tradeDays: number; best: SavingsRow | null; negativeDays: number; allLocked: boolean; estimatedDays: number; impliedDays: number;
   energyCharge: number; charges: Record<ChargeKey, number>;
 }
 
@@ -122,7 +124,8 @@ export function totalsOf(rows: SavingsRow[]): SavingsTotals {
     best,
     negativeDays: rows.filter((r) => n(r.net_savings_per_day) < 0).length,
     allLocked: rows.every((r) => r.is_locked),
-    estimatedDays: rows.filter((r) => r.benchmark_estimated).length,
+    estimatedDays: rows.filter((r) => r.benchmark_estimated && r.benchmark_source !== 'implied').length,
+    impliedDays: rows.filter((r) => r.benchmark_source === 'implied').length,
     energyCharge: sum('iex_energy_charge'),
     charges,
   };
@@ -135,6 +138,9 @@ export function totalsOf(rows: SavingsRow[]): SavingsTotals {
  * DISCOM ToD rate for its voltage level plus FPPCA (app_tod_schedule, migrations 005/006), weighted by the
  * block's cleared kWh. Without block data for the day, the day's average ToD rate is used. Grid cost, net
  * savings and % below grid are then recomputed from it, and the row is flagged benchmark_estimated.
+ * When ergOS DID store a savings figure for the day (only its grid cost is missing), its savings are kept as
+ * they are and the grid cost is implied from them (IEX cost + savings), so the client view's savings always
+ * equal ergOS's; the tariff estimate is used only for days with no savings figure at all.
  * Days ergOS did price are never touched.
  */
 export async function estimateBenchmarks(q: Query, plantId: number, rows: SavingsRow[]): Promise<SavingsRow[]> {
@@ -157,12 +163,18 @@ export async function estimateBenchmarks(q: Query, plantId: number, rows: Saving
   const byDay = new Map(rates.map((r) => [r.day, r.weighted ?? r.flat]));
   return rows.map((r) => {
     if (!missing.includes(r)) return r;
+    // ergOS has savings but no grid cost: keep its savings, imply the grid cost and benchmark from them
+    if (r.net_savings_per_day != null && r.net_savings_per_day !== 0 && (r.iex_total_cost || 0) > 0) {
+      const grid = (r.iex_total_cost || 0) + r.net_savings_per_day;
+      return { ...r, grid_total_cost: grid, avg_grid_tariff: grid / r.volume_cleared_kwh,
+               percent_below_grid: grid ? (r.net_savings_per_day / grid) * 100 : null, benchmark_estimated: true, benchmark_source: 'implied' as const };
+    }
     const rate = byDay.get(r.trade_date);
     if (!rate || !(rate > 0)) return r;
     const grid = rate * r.volume_cleared_kwh;
     const savings = grid - (r.iex_total_cost || 0);
     return { ...r, avg_grid_tariff: rate, grid_total_cost: grid, net_savings_per_day: savings,
-             percent_below_grid: grid ? (savings / grid) * 100 : null, benchmark_estimated: true };
+             percent_below_grid: grid ? (savings / grid) * 100 : null, benchmark_estimated: true, benchmark_source: 'tariff' as const };
   });
 }
 
