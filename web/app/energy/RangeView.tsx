@@ -10,6 +10,7 @@ import { inr, mwhValue } from '@/lib/format';
 import { href, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
 import { ScopeBar } from '@/components/shell/ScopeBar';
+import { EnergyModes } from '@/components/shell/EnergyTime';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -18,14 +19,10 @@ import { Icon } from '@/components/ui/Icon';
 import { StatTile } from '@/components/ui/StatTile';
 import { HistoryChart } from '@/components/charts/HistoryChart';
 
-export const dynamic = 'force-dynamic';
-export const metadata = { title: 'History' };
-
 const share = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : '—');
 
-export default async function HistoryPage({ searchParams }: { searchParams: Promise<SP> }) {
+export async function RangeView({ sp }: { sp: SP }) {
   const user = await requireUser('view_today');
-  const sp = await searchParams;
   const today = istToday();
   const period = resolveHistoryPeriod(sp, today);
 
@@ -40,7 +37,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
 
   if (!view.sel) {
     return (
-      <Shell user={user} page="history" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
+      <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
         <Empty title="No plants are assigned to your account yet" icon="factory">Ask your Joulewise contact to map your plants.</Empty>
       </Shell>
     );
@@ -56,27 +53,25 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const hidden = [...(data.hasSolar ? [] : ['solar', 'surplus'] as const), ...(data.hasBank ? [] : ['bank'] as const)];
 
   return (
-    <Shell user={user} page="history" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
+    <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
       {period.clamped ? <Notice>Ranges are limited to {HISTORY_MAX_DAYS} days. Showing {range}.</Notice> : null}
       {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} between {range}. Pick another range, or check that the sync is running.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
-        clientHref={(c) => href('/history', { client: c.client_id, ...keep })}
-        plantHref={(p) => href('/history', { client: sel.client.client_id, plant: p.plant_id, ...keep })}
+        clientHref={(c) => href('/energy', { client: c.client_id, ...keep })}
+        plantHref={(p) => href('/energy', { client: sel.client.client_id, plant: p.plant_id, ...keep })}
         controls={
-          <form method="get" action="/history" className="ecv-period">
+          <form method="get" action="/energy" className="ecv-period">
             <input type="hidden" name="client" value={sel.client.client_id} />
             <input type="hidden" name="plant" value={sel.plant.plant_id} />
-            <div className="eg-seg eg-seg--glass" role="group" aria-label="Period presets">
-              <button type="submit" name="preset" value="mtd" aria-pressed={period.preset === 'mtd'}>Month to date</button>
-              <button type="submit" name="preset" value="last7" aria-pressed={period.preset === 'last7'}>Last 7 days</button>
-            </div>
+            <EnergyModes client={sel.client.client_id} plant={sel.plant.plant_id}
+              mode={period.preset === 'mtd' ? 'mtd' : period.preset === 'last7' ? 'last7' : 'custom'} date={period.to} today={today} />
             <div className="eg-row">
               <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
                 <input type="date" name="from" defaultValue={period.from} max={today} aria-label="From" /></label>
               <Icon name="arrow-right" size={15} />
               <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
                 <input type="date" name="to" defaultValue={period.to} max={today} aria-label="To" /></label>
-              <button className="eg-btn eg-btn--primary" type="submit"><Icon name="bars" size={16} />Show history</button>
+              <button className="eg-btn eg-btn--primary" type="submit"><Icon name="bars" size={16} />Show range</button>
             </div>
           </form>
         } />

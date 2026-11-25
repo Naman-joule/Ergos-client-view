@@ -26,6 +26,15 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ['pg'],
   poweredByHeader: false,
+  // Old routes from before the four-destination navigation; query strings carry over.
+  async redirects() {
+    return [
+      { source: '/today', destination: '/energy', permanent: false },
+      { source: '/history', destination: '/energy', permanent: false },
+      { source: '/iex-prices', destination: '/market/prices', permanent: false },
+      { source: '/obligation-reports', destination: '/market/reports', permanent: false },
+    ];
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

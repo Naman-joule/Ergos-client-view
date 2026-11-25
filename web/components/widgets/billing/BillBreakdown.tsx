@@ -13,8 +13,8 @@ const mwh = (kwh: number) => `${inr(kwh / 1000, kwh >= 100_000 ? 0 : 1)} MWh`;
 const rate = (v: number | null) => (v != null ? `₹${v.toFixed(2)}/kWh` : '—');
 const segLabel = (todType: string, key: string) => {
   const base = todName(todType.toUpperCase().replace(/[^A-Z]/g, '') || todType);
-  const n = key.match(/_(\d+)$/)?.[1];
-  return n ? `${base} ${n}` : base;
+  const m = key.match(/_(\d+)(?:\.(\d+))?$/);
+  return m ? `${base} ${m[1]}${m[2] ? `.${m[2]}` : ''}` : base;
 };
 const segTime = (blocks: string) => {
   const [a, b] = blocks.split('-').map(Number);

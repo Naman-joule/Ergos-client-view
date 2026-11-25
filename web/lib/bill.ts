@@ -10,8 +10,9 @@
 //   banking: adjusted discharge × solar rate = "cost saved by banking" (not part of the bill)
 //   cost if all from grid = demand × grid rate
 //   bill = grid ₹ + solar ₹ + exchange ₹;  average ₹/kWh = bill ÷ demand
-// ToD segments: contiguous runs of the same ToD type in the day's schedule, numbered per type in order
-// (OFFPEAK_1 … NORMAL_1, NORMAL_2 … OFFPEAK_2); a type already numbered in the tariff (normal_1) is used as is.
+// ToD segments: contiguous runs of the same ToD type AND the same grid rate in the day's schedule, numbered per
+// type in order (OFFPEAK_1 … NORMAL_1, NORMAL_2 … OFFPEAK_2), so two Normal periods at different rates stay
+// apart, as on the Today ToD view; a type already numbered in the tariff (normal_1) is used as is.
 
 export interface BillBlock {
   hasMeter: boolean;
@@ -60,19 +61,20 @@ export const netVsGrid = (b: BillTotals) => b.allGridPricedRs - b.billPricedRs;
 export const billTotal = (b: BillTotals) => b.gridCostRs + b.solarCostRs + b.exchangeCostRs;
 export const billRate = (b: BillTotals) => (b.demandKwh > 0 ? billTotal(b) / b.demandKwh : null);
 
-/** Segment (key, base type, "start-end") for each of the 96 blocks, from the day's ToD types. */
-export function todSegments(tod: (string | null)[]): ({ key: string; todType: string; blocks: string } | null)[] {
+/** Segment (key, base type, "start-end") for each of the 96 blocks, from the day's ToD types (and rates, when given). */
+export function todSegments(tod: (string | null)[], rates?: (number | null)[]): ({ key: string; todType: string; blocks: string } | null)[] {
+  const sameRate = (a: number, b: number) => !rates || (rates[a] ?? null) === (rates[b] ?? null) || Math.abs((rates[a] ?? NaN) - (rates[b] ?? NaN)) < 1e-9;
   const out: ({ key: string; todType: string; blocks: string } | null)[] = new Array(tod.length).fill(null);
   const counts = new Map<string, number>();
   let start = 0;
   for (let i = 1; i <= tod.length; i++) {
-    if (i < tod.length && tod[i] === tod[start]) continue;
+    if (i < tod.length && tod[i] === tod[start] && sameRate(i, start)) continue;
     const cur = tod[start];
     if (cur) {
       const numbered = /_(\d+)$/.test(cur);
       const n = (counts.get(cur) ?? 0) + 1;
-      if (!numbered) counts.set(cur, n);
-      const seg = { key: numbered ? cur : `${cur}_${n}`, todType: numbered ? cur.replace(/_\d+$/, '') : cur, blocks: `${start + 1}-${i}` };
+      counts.set(cur, n);
+      const seg = { key: numbered ? (n > 1 ? `${cur}.${n}` : cur) : `${cur}_${n}`, todType: numbered ? cur.replace(/_\d+$/, '') : cur, blocks: `${start + 1}-${i}` };
       for (let k = start; k < i; k++) out[k] = seg;
     }
     start = i;
@@ -112,7 +114,7 @@ function addInto(t: BillTotals, b: BillBlock, grid: number, surplus: number) {
 
 export function billDay(blocks: BillBlock[]): BillDay {
   const day: BillDay = { ...zeroBill(), segments: {} };
-  const segs = todSegments(blocks.map((b) => b.tod));
+  const segs = todSegments(blocks.map((b) => b.tod), blocks.map((b) => b.gridRate));
   blocks.forEach((b, i) => {
     if (!b.hasMeter) return;
     const demand = Math.max(0, b.demandKwh);

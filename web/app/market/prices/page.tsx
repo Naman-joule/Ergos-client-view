@@ -7,6 +7,7 @@ import { addDays, blockEnd, blockStart, currentBlock, formatDateLong, istToday }
 import { inr } from '@/lib/format';
 import { href, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
+import { MarketTabs } from '@/components/shell/MarketTabs';
 import { DayPager } from '@/components/shell/DayPager';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { Card } from '@/components/ui/Card';
@@ -40,7 +41,8 @@ export default async function IexPricesPage({ searchParams }: { searchParams: Pr
   const at = (b: number | undefined) => (b ? `${blockStart(b)}–${blockEnd(b)}` : '');
 
   return (
-    <Shell user={user} page="iex" liveBlock={currentBlock()} syncLag={lag} themeMode="dark">
+    <Shell user={user} page="market" liveBlock={currentBlock()} syncLag={lag} themeMode="dark">
+      <MarketTabs current="prices" />
       {!range.latest ? <Notice>IEX market prices haven’t been synced yet. They appear once the sync has IEX_DATABASE_URL and has run.</Notice> : null}
       {range.latest && !data.hasData ? <Notice>No IEX prices for {dayLabel}. Prices are available from {range.earliest} to {range.latest}.</Notice> : null}
 
@@ -48,9 +50,9 @@ export default async function IexPricesPage({ searchParams }: { searchParams: Pr
         <div className="ecv-iexbar">
           <div className="ecv-iexbar__title"><b>Indian Energy Exchange · market clearing prices</b><span>Same for every client · DAM, RTM and GDAM · ₹/kWh per 15-minute block</span></div>
           <div className="ecv-scope__controls">
-            <DayPager date={data.date} today={today} max={max} hrefFor={(d) => href('/iex-prices', { date: d })} />
+            <DayPager date={data.date} today={today} max={max} hrefFor={(d) => href('/market/prices', { date: d })} />
             {range.latest && range.latest > today && data.date !== range.latest
-              ? <a className="eg-btn eg-btn--sm eg-btn--ghost" href={href('/iex-prices', { date: range.latest })}>Tomorrow’s DAM</a> : null}
+              ? <a className="eg-btn eg-btn--sm eg-btn--ghost" href={href('/market/prices', { date: range.latest })}>Tomorrow’s DAM</a> : null}
             <a className="ecv-sheet ecv-sheet--excel ecv-export" download href={`/api/export/iex?date=${data.date}`} title="Excel: every block of the day, and 30 days of daily averages">
               <Icon name="download" size={14} />Export
             </a>

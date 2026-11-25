@@ -133,3 +133,15 @@ test('the excess breakdown adds up to the excess in the compared blocks', () => 
   assert.equal(d.solarExcessPricedKwh, 20);
   assert.ok(excessCost(d) > d.excessPricedRs);           // the unpriced block's excess is only in the month-wide figure
 });
+
+test('ToD segments split where the rate changes inside one ToD type', () => {
+  const tod = [...Array(20).fill('NORMAL'), ...Array(24).fill('NORMAL'), ...Array(52).fill('PEAK')];
+  const rates = [...Array(20).fill(6.8), ...Array(24).fill(6.1), ...Array(52).fill(8.3)];
+  const s = todSegments(tod, rates);
+  assert.deepEqual([s[0]!.key, s[25]!.key, s[60]!.key], ['NORMAL_1', 'NORMAL_2', 'PEAK_1']);
+  assert.equal(s[25]!.blocks, '21-44');
+  // without rates, the old behaviour: one run per contiguous type
+  assert.equal(todSegments(tod)[25]!.key, 'NORMAL_1');
+  // a rate gap that is only float noise does not split
+  assert.equal(todSegments(['A', 'A'], [6.1, 6.1 + 1e-12])[1]!.key, 'A_1');
+});
