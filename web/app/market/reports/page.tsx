@@ -8,7 +8,6 @@ import { obligationFtpConfigured } from '@/lib/obligation-ftp';
 import { addDays, currentBlock, formatDate, istToday } from '@/lib/time';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
-import { MarketTabs } from '@/components/shell/MarketTabs';
 import { ScopeBar } from '@/components/shell/ScopeBar';
 import { Card } from '@/components/ui/Card';
 import { Empty, Notice } from '@/components/ui/Empty';
@@ -47,16 +46,14 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
 
   if (!view.sel) {
     return (
-      <Shell user={user} page="market" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
-      <MarketTabs current="reports" />
+      <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
         <Empty title="No plants are assigned to your account yet" icon="factory">Ask your Joulewise contact to map your plants.</Empty>
       </Shell>
     );
   }
   if ('missing' in view) {
     return (
-      <Shell user={user} page="market" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
-      <MarketTabs current="reports" />
+      <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
         <Empty title="Obligation reports aren’t set up in the database yet" icon="file">
           Run db/migrations/009_obligation_reports.sql in the Supabase SQL editor, then reload this page.
         </Empty>
@@ -84,8 +81,7 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
   const portfolios = [...new Set(rows.map((r) => r.portfolio_name ?? r.portfolio_code).filter(Boolean))];
 
   return (
-    <Shell user={user} page="market" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
-      <MarketTabs current="reports" />
+    <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
       {isAdmin && !obligationFtpConfigured() ? <Notice>Uploads and downloads are switched off: set OBLIGATION_FTP_URL on the server (a write account for the obligation folder only).</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/market/reports', { client: c.client_id })}

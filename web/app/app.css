@@ -611,3 +611,33 @@ body { font-variant-numeric: tabular-nums; }
 @media (max-width: 1179px) { .ecv-scope__pick { flex-wrap: wrap; } }
 @media (max-width: 599px) { .ecv-modes { width: 100%; } .ecv-modes a { flex: 1 0 auto; justify-content: center; padding: 0 10px; height: 36px; } }
 @media (prefers-reduced-motion: reduce) { .ecv-modes a, .ecv-slot { transition: none; } }
+
+/* ---------------------------------------------------------------- compact sticky time bar
+   Zero-height sticky track (its grid gap is cancelled), so it never moves content; the bar inside slides down
+   once the full plant/time bar has scrolled away.                                                              */
+.ecv-screen > .eg-main { --main-gap: var(--space-6); }
+.ecv-stick { position: sticky; top: 0; height: 0; z-index: var(--z-header); margin-top: calc(-1 * var(--main-gap)); }
+.ecv-stick__bar { position: absolute; inset: 8px 0 auto; display: flex; align-items: center; gap: var(--space-3); padding: 8px 8px 8px 16px;
+  border-radius: var(--radius-lg); border: 1px solid var(--line-strong); box-shadow: 0 16px 40px -16px rgba(0,0,0,.55);
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  transform: translateY(calc(-100% - 16px)); opacity: 0; pointer-events: none; transition: transform .24s cubic-bezier(.2,0,0,1), opacity .18s ease; }
+.ecv-stick.is-on .ecv-stick__bar { transform: none; opacity: 1; pointer-events: auto; }
+.ecv-stick__title { display: grid; min-width: 0; font: 600 14px/18px var(--font-sans); white-space: nowrap; }
+.ecv-stick__title small { font: 400 11.5px/14px var(--font-sans); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; }
+.ecv-stick__controls { display: flex; align-items: center; gap: var(--space-2); flex: 1 1 auto; min-width: 0; justify-content: flex-start;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.ecv-stick__controls > *, .ecv-stick__controls .ecv-period, .ecv-stick__controls .ecv-period .eg-row { flex-wrap: nowrap; flex: none; }
+.ecv-stick__controls .ecv-export, .ecv-stick__controls .ecv-today-link { display: none; }
+.ecv-stick__top { flex: none; }
+/* right-aligned when it fits; when it overflows, the auto margin collapses so the first control stays reachable */
+.ecv-stick__controls > :first-child { margin-inline-start: auto; }
+.ecv-stick__title { max-width: 170px; flex: none; } .ecv-stick__title { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 599px) {
+  .ecv-screen > .eg-main { --main-gap: var(--space-4); }
+  .ecv-stick__bar { inset: 6px 0 auto; padding: 6px; gap: 6px; border-radius: var(--radius-md); }
+  .ecv-stick__title { display: none; }
+  .ecv-stick__controls { justify-content: flex-start; }
+  .ecv-stick__controls .ecv-modes { width: auto; }
+  .ecv-stick__controls .ecv-modes a { height: 32px; padding: 0 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .ecv-stick__bar { transition: none; } }

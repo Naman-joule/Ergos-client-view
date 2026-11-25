@@ -8,8 +8,8 @@ import { blockEnd } from '@/lib/time';
 import type { SessionUser } from '@/lib/auth';
 import { ago, timeState } from '@/lib/time-state';
 
-export type Page = 'energy' | 'savings' | 'billing' | 'market';
-const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', market: 'Market' };
+export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports';
+const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'Obligation reports' };
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('') || '·';
@@ -20,6 +20,7 @@ function initials(name: string) {
  *   laptop ≥ 1180  sidebar with labels
  *   tablet 600–1179  72 px icon rail
  *   phone ≤ 599  bottom tab bar in thumb reach
+ * Five destinations: Energy, Savings, Billing, IEX prices, Obligation reports.
  * The top bar carries the page title and ONE time badge (live / delayed / stale). A stale sync also opens the
  * reserved notice slot under the top bar; the slot is always in the layout, so nothing below it moves.
  */
@@ -33,7 +34,8 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
     { page: 'energy', href: '/energy', icon: 'bolt', label: 'Energy', show: user.permissions.has('view_today') },
     { page: 'savings', href: '/savings', icon: 'rupee', label: 'Savings', show: user.permissions.has('view_savings') },
     { page: 'billing', href: '/billing', icon: 'receipt', label: 'Billing', show: user.permissions.has('view_billing') },
-    { page: 'market', href: '/market/prices', icon: 'antenna', label: 'Market', show: user.permissions.has('view_iex') },
+    { page: 'prices', href: '/market/prices', icon: 'antenna', label: 'IEX prices', show: user.permissions.has('view_iex') },
+    { page: 'reports', href: '/market/reports', icon: 'file', label: 'Reports', show: user.permissions.has('view_iex') },
   ];
   const badge = state === 'live'
     ? { text: `Live · ${blockEnd(liveBlock)}`, title: `Current block B${liveBlock}, ending ${blockEnd(liveBlock)} IST. Data synced ${syncLag != null ? ago(syncLag) : ''}.` }

@@ -7,8 +7,8 @@ import { addDays, blockEnd, blockStart, currentBlock, formatDateLong, istToday }
 import { inr } from '@/lib/format';
 import { href, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
-import { MarketTabs } from '@/components/shell/MarketTabs';
 import { DayPager } from '@/components/shell/DayPager';
+import { StickyBar } from '@/components/shell/StickyBar';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Empty';
@@ -41,8 +41,7 @@ export default async function IexPricesPage({ searchParams }: { searchParams: Pr
   const at = (b: number | undefined) => (b ? `${blockStart(b)}–${blockEnd(b)}` : '');
 
   return (
-    <Shell user={user} page="market" liveBlock={currentBlock()} syncLag={lag} themeMode="dark">
-      <MarketTabs current="prices" />
+    <Shell user={user} page="prices" liveBlock={currentBlock()} syncLag={lag} themeMode="dark">
       {!range.latest ? <Notice>IEX market prices haven’t been synced yet. They appear once the sync has IEX_DATABASE_URL and has run.</Notice> : null}
       {range.latest && !data.hasData ? <Notice>No IEX prices for {dayLabel}. Prices are available from {range.earliest} to {range.latest}.</Notice> : null}
 
@@ -59,6 +58,9 @@ export default async function IexPricesPage({ searchParams }: { searchParams: Pr
           </div>
         </div>
       </section>
+      <StickyBar title="IEX prices">
+        <DayPager date={data.date} today={today} max={max} hrefFor={(d) => href('/market/prices', { date: d })} />
+      </StickyBar>
 
       <WidgetGrid palette="harmony">
         <WidgetCell span="full" type="iex.tiles">
