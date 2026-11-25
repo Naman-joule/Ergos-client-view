@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addBills, billDay, billRate, billTotal, todSegments, type BillBlock } from '../lib/bill.ts';
+import { addBills, billDay, billRate, billTotal, excessCost, savedOnUsed, todSegments, type BillBlock } from '../lib/bill.ts';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} vs ${b}`);
 const blk = (o: Partial<BillBlock>): BillBlock => ({
@@ -79,4 +79,27 @@ test('days add up to the month, segment by segment', () => {
   assert.equal(m.segments['PEAK_1']!.gridCostRs, 48 * 30 * 9);
   assert.equal(m.segments['OFFPEAK_1']!.gridCostRs, 48 * 30 * 6);
   assert.equal(billRate(m), (48 * 30 * 9 + 48 * 30 * 6) / (96 * 30));
+});
+
+test('buying beyond demand: the saving on energy used stays positive, the excess is shown separately', () => {
+  // demand 100; IEX 102 at ₹4 (cheaper than grid ₹8); solar 40 at ₹3, all beyond demand
+  const d = billDay([blk({ demandKwh: 100, exchangeKwh: 102, exchangeCostRs: 408, solarKwh: 40, gridRate: 8, solarRate: 3 })]);
+  assert.equal(d.gridKwh, 0);
+  assert.equal(billTotal(d), 408 + 120);                 // ergOS bill pays for all of it
+  assert.equal(d.allGridCostRs, 800);
+  assert.equal(d.usedCostRs, 400);                       // 100 kWh of IEX used at ₹4
+  assert.equal(savedOnUsed(d), 400);                     // real saving on what was consumed
+  assert.equal(d.exchangeExcessKwh, 2);
+  assert.equal(excessCost(d), 2 * 4 + 40 * 3);           // IEX beyond demand + surplus solar
+  assert.equal(savedOnUsed(d) - excessCost(d), d.allGridCostRs - billTotal(d));   // the net still reconciles
+});
+
+test('blocks without a grid rate are left out of the comparison on both sides', () => {
+  const d = billDay([
+    blk({ demandKwh: 10, gridRate: 8 }),
+    blk({ demandKwh: 10, exchangeKwh: 10, exchangeCostRs: 50, gridRate: null }),
+  ]);
+  assert.equal(d.allGridPricedRs, 80);
+  assert.equal(d.usedCostRs, 80);
+  assert.equal(savedOnUsed(d), 0);
 });

@@ -25,6 +25,13 @@ export interface BillTotals {
   chargeKwh: number; adjDischargeKwh: number; dischargeKwh: number;
   gridCostRs: number; solarCostRs: number; exchangeCostRs: number; bankSavedRs: number; allGridCostRs: number;
   gridUnpricedKwh: number;        // grid kWh in blocks with no grid rate (ergOS leaves them unpriced too)
+  // Like-for-like comparison with an all-grid supply (client view, not in ergOS). The bill also pays for
+  // energy the plant didn't use (solar beyond demand, IEX bought beyond demand), which an all-grid supply
+  // wouldn't buy, so the comparison splits it out. Exchange meets demand first, then solar (as ergOS).
+  exchangeExcessKwh: number; exchangeExcessCostRs: number;   // IEX bought beyond demand
+  solarExcessCostRs: number;                                 // solar beyond demand × solar rate
+  usedCostRs: number;             // cost of the energy consumed (grid + exchange used + solar used), blocks with a grid rate
+  allGridPricedRs: number;        // demand × grid rate over the same blocks (= allGridCostRs)
 }
 export interface BillSegment extends BillTotals { key: string; todType: string; blocks: string }
 export interface BillDay extends BillTotals { segments: Record<string, BillSegment> }
@@ -32,7 +39,12 @@ export interface BillDay extends BillTotals { segments: Record<string, BillSegme
 export const zeroBill = (): BillTotals => ({
   demandKwh: 0, gridKwh: 0, solarKwh: 0, solarSurplusKwh: 0, exchangeKwh: 0, chargeKwh: 0, adjDischargeKwh: 0, dischargeKwh: 0,
   gridCostRs: 0, solarCostRs: 0, exchangeCostRs: 0, bankSavedRs: 0, allGridCostRs: 0, gridUnpricedKwh: 0,
+  exchangeExcessKwh: 0, exchangeExcessCostRs: 0, solarExcessCostRs: 0, usedCostRs: 0, allGridPricedRs: 0,
 });
+/** All-grid cost minus the cost of the energy actually used (like for like). */
+export const savedOnUsed = (b: BillTotals) => b.allGridPricedRs - b.usedCostRs;
+/** What the plant paid for energy beyond its demand (surplus solar, IEX beyond demand). */
+export const excessCost = (b: BillTotals) => b.exchangeExcessCostRs + b.solarExcessCostRs;
 export const billTotal = (b: BillTotals) => b.gridCostRs + b.solarCostRs + b.exchangeCostRs;
 export const billRate = (b: BillTotals) => (b.demandKwh > 0 ? billTotal(b) / b.demandKwh : null);
 
@@ -63,6 +75,18 @@ function addInto(t: BillTotals, b: BillBlock, grid: number, surplus: number) {
   t.chargeKwh += b.chargeKwh; t.adjDischargeKwh += b.adjDischargeKwh; t.dischargeKwh += b.dischargeKwh;
   if (b.gridRate != null) { t.gridCostRs += grid * b.gridRate; t.allGridCostRs += demand * b.gridRate; } else t.gridUnpricedKwh += grid;
   if (b.solarRate != null) { t.solarCostRs += b.solarKwh * b.solarRate; t.bankSavedRs += b.adjDischargeKwh * b.solarRate; }
+
+  // like-for-like split: exchange meets demand first, then solar; the rest was bought beyond demand
+  const exRate = b.exchangeKwh > 0 ? b.exchangeCostRs / b.exchangeKwh : 0;
+  const exUsed = Math.min(b.exchangeKwh, demand), exExcess = b.exchangeKwh - exUsed;
+  const solarUsed = Math.min(b.solarKwh, Math.max(0, demand - exUsed)), solarExcess = b.solarKwh - solarUsed;
+  t.exchangeExcessKwh += exExcess;
+  t.exchangeExcessCostRs += exExcess * exRate;
+  if (b.solarRate != null) t.solarExcessCostRs += solarExcess * b.solarRate;
+  if (b.gridRate != null) {
+    t.allGridPricedRs += demand * b.gridRate;
+    t.usedCostRs += grid * b.gridRate + exUsed * exRate + (b.solarRate != null ? solarUsed * b.solarRate : 0);
+  }
 }
 
 export function billDay(blocks: BillBlock[]): BillDay {

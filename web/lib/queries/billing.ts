@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Query } from '../db';
 import { addDays, istToday } from '../time';
-import { addBills, billRate, billTotal, type BillSegment } from '../bill';
+import { addBills, billRate, billTotal, excessCost, savedOnUsed, type BillSegment } from '../bill';
 import { loadHistory, type HistoryDay } from './history';
 
 // Billing & costing: a plant's energy bill per calendar month, calculated the way ergOS's billing service does
@@ -27,6 +27,9 @@ export interface BillSummary {
   peakKw: number;
   gridCostRs: number; solarCostRs: number; exchangeCostRs: number; totalCostRs: number;
   bankSavedRs: number; allGridCostRs: number;
+  savedOnUsedRs: number;          // all-grid cost − cost of the energy used (like for like)
+  excessCostRs: number;           // paid for energy beyond demand: surplus solar + IEX beyond demand
+  solarExcessCostRs: number; exchangeExcessCostRs: number; exchangeExcessKwh: number;
   avgRate: number | null; exchangeRate: number | null; gridRate: number | null; solarRate: number | null;
   gridUnpricedKwh: number;
   fallbackDays: number;          // days priced with the ToD-schedule fallback (no ergOS tariff rows)
@@ -56,6 +59,8 @@ export function summarise(days: HistoryDay[]): BillSummary {
     peakKw: days.reduce((m, d) => Math.max(m, d.peakKw), 0),
     gridCostRs: b.gridCostRs, solarCostRs: b.solarCostRs, exchangeCostRs: b.exchangeCostRs, totalCostRs: billTotal(b),
     bankSavedRs: b.bankSavedRs, allGridCostRs: b.allGridCostRs,
+    savedOnUsedRs: savedOnUsed(b), excessCostRs: excessCost(b),
+    solarExcessCostRs: b.solarExcessCostRs, exchangeExcessCostRs: b.exchangeExcessCostRs, exchangeExcessKwh: b.exchangeExcessKwh,
     avgRate: billRate(b),
     exchangeRate: b.exchangeKwh ? b.exchangeCostRs / b.exchangeKwh : null,
     gridRate: priced > 0 ? b.gridCostRs / priced : null,

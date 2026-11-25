@@ -465,3 +465,4 @@
 .ecv-seg__bar { display: flex; gap: 2px; }
 .ecv-seg__bar span { display: block; height: 100%; }
 @media (max-width: 1100px) { .ecv-bill__facts { grid-template-columns: 1fr; } .ecv-seg__head { display: none; } .ecv-seg__row { grid-template-columns: 1fr 1fr 1fr; } }
+.ecv-warn { color: var(--warning, #d9a441); }
