@@ -4,7 +4,7 @@ import type { Row, SheetData } from 'write-excel-file/node';
 import { blockEnd, blockStart } from './time';
 import { todName } from './tod';
 import type { HistoryData } from './queries/history';
-import type { BillingData } from './queries/billing';
+import type { BillingData, BillSummary } from './queries/billing';
 import type { IexData } from './queries/iex';
 
 // Excel exports. Today's export and History's download are the same workbook (a one-day range for Today),
@@ -43,11 +43,11 @@ export async function historyWorkbook(data: HistoryData, meta: ExportMeta): Prom
   const days: SheetData = [title, note, [], [
     H('Date'), H('Blocks with data'), H('Demand kWh'), H('Power exchange bought kWh'), H('Power exchange used kWh'), H('Solar generated kWh'),
     H('Solar used kWh'), H('Banking kWh'), H('Grid kWh'), H('Surplus solar kWh'), H('Peak demand kW'), H('Peak at'),
-    H('IEX landed ₹/kWh'), H('IEX cost ₹'), H('Grid cost ₹'), H('Solar cost ₹'), H('Total energy cost ₹'), H('Average ₹/kWh'),
+    H('IEX landed ₹/kWh'), H('Exchange cost ₹'), H('Grid cost ₹'), H('Solar cost ₹'), H('Total bill ₹'), H('Average ₹/kWh'),
   ]];
   const dayRow = (label: Row[number], x: HistoryData['totals'] | HistoryData['days'][number], peakAt: string | null): Row => [
     label, n(x.blocks), kwh(x.demandKwh), kwh(x.iexKwh), kwh(x.iexUsedKwh), kwh(x.solarKwh), kwh(x.solarUsedKwh), kwh(x.bankKwh),
-    kwh(x.gridKwh), kwh(x.surplusKwh), n(Math.round(x.peakKw)), t(peakAt), rate(x.landedRate), rs(x.iexLandedRs), rs(x.gridCostRs),
+    kwh(x.gridKwh), kwh(x.surplusKwh), n(Math.round(x.peakKw)), t(peakAt), rate(x.landedRate), rs(x.exchangeCostRs), rs(x.gridCostRs),
     rs(x.solarCostRs), rs(x.totalCostRs), rate(x.demandKwh ? x.totalCostRs / x.demandKwh : null),
   ];
   for (const day of data.days) days.push(dayRow(d(day.date), day, day.peakBlock ? blockEnd(day.peakBlock) : null));
@@ -83,30 +83,45 @@ export async function historyWorkbook(data: HistoryData, meta: ExportMeta): Prom
 // ---------------------------------------------------------------------------- billing
 
 export async function billingWorkbook(b: BillingData, meta: ExportMeta): Promise<Buffer> {
-  const title: Row = [t(`${meta.plant} (${meta.client}) · monthly energy and cost · ${meta.from} to ${meta.to} · generated ${meta.generatedAt} IST`)];
-  const note: Row = [t('Energy charges only: IEX at landed cost (incl. open access charges), grid kWh × DISCOM ToD rate for the plant’s voltage + FPPCA, solar used × solar tariff where known. Fixed/demand charges and electricity duty are not included.')];
-  const head: Row = [H('Month'), H('Days with data'), H('Demand kWh'), H('Power exchange kWh'), H('Solar used kWh'), H('Banking kWh'), H('Grid kWh'),
-    H('Peak demand kW'), H('IEX cost ₹'), H('IEX ₹/kWh'), H('Grid cost ₹'), H('Grid ₹/kWh'), H('Solar cost ₹'), H('Total energy cost ₹'), H('Average ₹/kWh'), H('Note')];
-  const row = (label: Row[number], m: Omit<BillingData['months'][number], 'month' | 'partial' | 'daysInRange'>, extra: string | null): Row => [
-    label, n(m.daysWithData), kwh(m.demandKwh), kwh(m.iexKwh), kwh(m.solarUsedKwh), kwh(m.bankKwh), kwh(m.gridKwh), n(Math.round(m.peakKw)),
-    rs(m.iexCostRs), rate(m.iexRate), rs(m.gridCostRs), rate(m.gridRate), rs(m.solarCostRs), rs(m.totalCostRs), rate(m.avgRate), t(extra)];
+  const title: Row = [t(`${meta.plant} (${meta.client}) · energy bill by month · ${meta.from} to ${meta.to} · generated ${meta.generatedAt} IST`)];
+  const note: Row = [t('Calculated as ergOS bills: per metered block, grid kWh = demand − solar − banking adjusted discharge − exchange; grid × tariff × (1+FPPCA%) × (1+duty%); all solar × solar tariff; exchange × landed rate. Bill = grid + exchange + solar.')];
+  const head: Row = [H('Month'), H('Days with data'), H('Demand kWh'), H('Grid kWh'), H('Grid ₹/kWh'), H('Grid cost ₹'), H('Exchange kWh'), H('Exchange ₹/kWh'),
+    H('Exchange cost ₹'), H('Solar kWh'), H('Solar ₹/kWh'), H('Solar cost ₹'), H('Total bill ₹'), H('Average ₹/kWh'), H('Banking drawn kWh'),
+    H('Cost saved by banking ₹'), H('Cost if all from grid ₹'), H('Note')];
+  const row = (label: Row[number], m: BillSummary, extra: string | null): Row => [
+    label, n(m.daysWithData), kwh(m.demandKwh), kwh(m.gridKwh), rate(m.gridRate), rs(m.gridCostRs), kwh(m.exchangeKwh), rate(m.exchangeRate),
+    rs(m.exchangeCostRs), kwh(m.solarKwh), rate(m.solarRate), rs(m.solarCostRs), rs(m.totalCostRs), rate(m.avgRate), kwh(m.bankKwh),
+    rs(m.bankSavedRs), rs(m.allGridCostRs), t(extra)];
   const monthly: SheetData = [title, note, [], head];
   for (const m of b.months) {
-    const notes = [m.partial ? 'month to date' : null, m.gridUnpricedKwh > 0.5 ? `${Math.round(m.gridUnpricedKwh)} grid kWh without a ToD rate` : null].filter(Boolean).join('; ');
+    const notes = [m.partial ? 'month to date' : null, m.fallbackDays ? `${m.fallbackDays} days priced with the ToD-schedule fallback` : null,
+      m.gridUnpricedKwh > 0.5 ? `${Math.round(m.gridUnpricedKwh)} grid kWh without a rate` : null].filter(Boolean).join('; ');
     monthly.push(row(t(m.month), m, notes || null));
   }
   monthly.push([], row({ value: 'Total', type: String, fontWeight: 'bold' }, b.total, null));
 
-  const days: SheetData = [title, note, [], [H('Date'), H('Demand kWh'), H('Power exchange kWh'), H('Solar used kWh'), H('Banking kWh'), H('Grid kWh'),
-    H('IEX cost ₹'), H('Grid cost ₹'), H('Solar cost ₹'), H('Total energy cost ₹'), H('Average ₹/kWh')]];
+  const segs: SheetData = [title, note, [], [H('Month'), H('Segment'), H('ToD type'), H('Blocks'), H('Demand kWh'), H('Grid kWh'), H('Grid cost ₹'),
+    H('Exchange kWh'), H('Exchange cost ₹'), H('Solar kWh'), H('Solar cost ₹'), H('Segment bill ₹'), H('Average ₹/kWh'), H('Banking saved ₹')]];
+  for (const m of b.months) {
+    for (const s of m.segments) {
+      const tot = s.gridCostRs + s.exchangeCostRs + s.solarCostRs;
+      segs.push([t(m.month), t(s.key), t(s.todType), t(s.blocks), kwh(s.demandKwh), kwh(s.gridKwh), rs(s.gridCostRs), kwh(s.exchangeKwh),
+        rs(s.exchangeCostRs), kwh(s.solarKwh), rs(s.solarCostRs), rs(tot), rate(s.demandKwh ? tot / s.demandKwh : null), rs(s.bankSavedRs)]);
+    }
+  }
+
+  const days: SheetData = [title, note, [], [H('Date'), H('Demand kWh'), H('Grid kWh'), H('Grid cost ₹'), H('Exchange kWh'), H('Exchange cost ₹'),
+    H('Solar kWh'), H('Solar cost ₹'), H('Total bill ₹'), H('Average ₹/kWh'), H('Cost saved by banking ₹'), H('Cost if all from grid ₹'), H('Tariff')]];
   for (const x of [...b.days].reverse()) {
     if (!x.blocks) continue;
-    days.push([d(x.date), kwh(x.demandKwh), kwh(x.iexKwh), kwh(x.solarUsedKwh), kwh(x.bankKwh), kwh(x.gridKwh),
-      rs(x.iexLandedRs), rs(x.gridCostRs), rs(x.solarCostRs), rs(x.totalCostRs), rate(x.demandKwh ? x.totalCostRs / x.demandKwh : null)]);
+    days.push([d(x.date), kwh(x.bill.demandKwh), kwh(x.bill.gridKwh), rs(x.gridCostRs), kwh(x.bill.exchangeKwh), rs(x.exchangeCostRs),
+      kwh(x.bill.solarKwh), rs(x.solarCostRs), rs(x.totalCostRs), rate(x.bill.demandKwh ? x.totalCostRs / x.bill.demandKwh : null),
+      rs(x.bankSavedRs), rs(x.allGridCostRs), t(x.pricedBy === 'fallback' ? 'ToD schedule (fallback)' : 'ergOS tariff')]);
   }
   return writeXlsxFile([
-    { sheet: 'Monthly', data: monthly, stickyRowsCount: 4, columns: [{ width: 12 }, ...Array.from({ length: 14 }, () => ({ width: 15 })), { width: 34 }] },
-    { sheet: 'Day-wise', data: days, stickyRowsCount: 4, columns: [{ width: 13 }, ...Array.from({ length: 10 }, () => ({ width: 15 }))] },
+    { sheet: 'Monthly', data: monthly, stickyRowsCount: 4, columns: [{ width: 12 }, ...Array.from({ length: 16 }, () => ({ width: 15 })), { width: 34 }] },
+    { sheet: 'ToD segments', data: segs, stickyRowsCount: 4, columns: [{ width: 12 }, { width: 13 }, { width: 11 }, { width: 9 }, ...Array.from({ length: 10 }, () => ({ width: 15 }))] },
+    { sheet: 'Day-wise', data: days, stickyRowsCount: 4, columns: [{ width: 13 }, ...Array.from({ length: 11 }, () => ({ width: 15 })), { width: 22 }] },
   ], { fontFamily: 'Calibri', fontSize: 11 }).toBuffer();
 }
 

@@ -1,49 +1,48 @@
 import { inr } from '@/lib/format';
 import { todName } from '@/lib/tod';
-import type { RunStats } from '@/lib/tod';
+import { blockEnd, blockStart } from '@/lib/time';
+import { billTotal } from '@/lib/bill';
 import type { BillMonth } from '@/lib/queries/billing';
 
-// "How this month's bill is calculated", as a visual sum: one row per source (energy x rate = cost, bar sized by
-// cost), the total and the average ₹/kWh; energy share vs cost share; and the grid cost split by ToD period.
+// "How this month's bill is calculated", following ergOS's billing: energy × rate = cost for grid, solar and
+// exchange (bars sized by cost), the bill and its average ₹/kWh, what banking saved and what an all-grid supply
+// would have cost, energy vs cost shares, and the bill by ToD segment (ergOS tod_bill_breakdown).
 
 const rs = (v: number) => `₹${inr(Math.round(v))}`;
 const mwh = (kwh: number) => `${inr(kwh / 1000, kwh >= 100_000 ? 0 : 1)} MWh`;
 const rate = (v: number | null) => (v != null ? `₹${v.toFixed(2)}/kWh` : '—');
+const segLabel = (todType: string, key: string) => {
+  const base = todName(todType.toUpperCase().replace(/[^A-Z]/g, '') || todType);
+  const n = key.match(/_(\d+)$/)?.[1];
+  return n ? `${base} ${n}` : base;
+};
+const segTime = (blocks: string) => {
+  const [a, b] = blocks.split('-').map(Number);
+  return a && b ? `${blockStart(a)}–${blockEnd(b)}` : blocks;
+};
 
-export function BillBreakdown({ m, runs, monthLabel }: { m: BillMonth; runs: RunStats[] | undefined; monthLabel: string }) {
-  const solarRate = m.solarUsedKwh > 0 && m.solarCostRs > 0 ? m.solarCostRs / m.solarUsedKwh : null;
+export function BillBreakdown({ m, monthLabel }: { m: BillMonth; monthLabel: string }) {
   const rows = [
-    { key: 'iex', slot: 'iex', label: 'Power exchange', kwh: m.iexKwh, rate: m.iexRate, cost: m.iexCostRs, note: 'Landed cost incl. open access charges, whole purchase' },
-    { key: 'grid', slot: 'grid', label: 'Grid', kwh: m.gridKwh, rate: m.gridRate, cost: m.gridCostRs, note: 'DISCOM ToD rate for the voltage level + FPPCA, block by block' },
-    { key: 'solar', slot: 'solar', label: 'Solar', kwh: m.solarUsedKwh, rate: solarRate, cost: m.solarCostRs, note: solarRate ? 'Solar used × solar tariff' : 'Captive solar, no tariff on record' },
-    { key: 'bank', slot: 'battery', label: 'Banking', kwh: m.bankKwh, rate: m.bankKwh ? 0 : null, cost: 0, note: 'Energy drawn from the bank; banking charges aren’t in the synced data' },
+    { key: 'grid', slot: 'grid', label: 'Grid', kwh: m.gridKwh, rate: m.gridRate, cost: m.gridCostRs,
+      note: 'Grid kWh = demand − solar − banking − exchange, per block; priced at the DISCOM tariff × (1 + FPPCA%) × (1 + duty%)' },
+    { key: 'iex', slot: 'iex', label: 'Power exchange', kwh: m.exchangeKwh, rate: m.exchangeRate, cost: m.exchangeCostRs,
+      note: 'Cleared quantity × landed ₹/kWh, in blocks with a meter reading' },
+    { key: 'solar', slot: 'solar', label: 'Solar', kwh: m.solarKwh, rate: m.solarRate, cost: m.solarCostRs,
+      note: m.solarRate ? 'All solar from the mapped plant × solar tariff' : 'No solar tariff on record' },
   ].filter((r) => r.kwh > 0.5 || r.cost > 0.5);
   const max = Math.max(...rows.map((r) => r.cost), 1);
+  const bill = m.totalCostRs;
 
-  // energy met vs cost, as shares of the month
   const energy = [
-    { key: 'iex', slot: 'iex', label: 'Power exchange', v: m.iexUsedKwh },
-    { key: 'solar', slot: 'solar', label: 'Solar', v: m.solarUsedKwh },
+    { key: 'iex', slot: 'iex', label: 'Power exchange', v: m.exchangeKwh },
+    { key: 'solar', slot: 'solar', label: 'Solar', v: m.solarKwh },
     { key: 'bank', slot: 'battery', label: 'Banking', v: m.bankKwh },
     { key: 'grid', slot: 'grid', label: 'Grid', v: m.gridKwh },
   ];
   const eTot = energy.reduce((s, e) => s + e.v, 0) || 1;
   const cost = rows.map((r) => ({ key: r.key, slot: r.slot, label: r.label, v: r.cost }));
-  const cTot = m.totalCostRs || 1;
-
-  // grid (and IEX) by ToD period: Peak / Normal / Off-peak summed over the month's runs
-  const byPeriod = new Map<string, { label: string; hours: number; grid: number; gridCost: number; iex: number; iexCost: number }>();
-  for (const r of runs ?? []) {
-    const key = r.key.replace(/\d+$/, '');
-    const g = r.parts.find((p) => p.key === 'grid'), x = r.parts.find((p) => p.key === 'iex');
-    const cur = byPeriod.get(key) ?? { label: todName(key), hours: 0, grid: 0, gridCost: 0, iex: 0, iexCost: 0 };
-    cur.hours += r.hours; cur.grid += (g?.mwh ?? 0) * 1000; cur.gridCost += g?.cost ?? 0; cur.iex += (x?.mwh ?? 0) * 1000; cur.iexCost += x?.cost ?? 0;
-    byPeriod.set(key, cur);
-  }
-  const order = ['PEAK', 'NORMAL', 'OFFPEAK'];
-  const rank = (k: string) => (order.includes(k) ? order.indexOf(k) : 9);
-  const periods = [...byPeriod.entries()].sort((a, b) => rank(a[0]) - rank(b[0])).map(([, v]) => v);
-  const pMax = Math.max(...periods.map((p) => p.gridCost), 1);
+  const segMax = Math.max(...m.segments.map((s) => billTotal(s)), 1);
+  const vsGrid = m.allGridCostRs - bill;
 
   return (
     <div className="ecv-bill">
@@ -61,36 +60,54 @@ export function BillBreakdown({ m, runs, monthLabel }: { m: BillMonth; runs: Run
             <span role="cell" className="num"><b>{rs(r.cost)}</b></span>
             <span role="cell" className="ecv-bill__barcell">
               <span className="ecv-bill__bar"><span className="ecv-bill__fill" style={{ width: `${(r.cost / max) * 100}%`, background: `var(--c-${r.slot})` }} /></span>
-              <small>{m.totalCostRs ? `${Math.round((r.cost / m.totalCostRs) * 100)}%` : '—'}</small>
+              <small>{bill ? `${Math.round((r.cost / bill) * 100)}%` : '—'}</small>
             </span>
           </div>
         ))}
         <div className="ecv-bill__row ecv-bill__row--total" role="row">
-          <span role="cell">Energy bill</span><span role="cell" className="num">{mwh(m.demandKwh)}</span><span role="cell" className="ecv-bill__op">×</span>
+          <span role="cell">Total bill</span><span role="cell" className="num">{mwh(m.demandKwh)}</span><span role="cell" className="ecv-bill__op">×</span>
           <span role="cell" className="num">{rate(m.avgRate)}</span><span role="cell" className="ecv-bill__op">=</span>
-          <span role="cell" className="num"><b>{rs(m.totalCostRs)}</b></span>
-          <span role="cell" className="eg-muted ecv-bill__totnote">Demand × average rate. IEX bought beyond demand is still paid for, so source energy can add up to more than demand.</span>
+          <span role="cell" className="num"><b>{rs(bill)}</b></span>
+          <span role="cell" className="eg-muted ecv-bill__totnote">Grid + power exchange + solar. Average power purchase price = bill ÷ demand.</span>
         </div>
       </div>
 
-      <div className="ecv-bill__split">
-        <ShareBar title="Where the energy came from" parts={energy.map((e) => ({ ...e, pct: (e.v / eTot) * 100, text: mwh(e.v) }))} />
-        <ShareBar title="Where the money went" parts={cost.map((c) => ({ ...c, pct: (c.v / cTot) * 100, text: rs(c.v) }))} />
+      <div className="ecv-bill__facts">
+        <div><span>Cost saved by banking</span><b>{rs(m.bankSavedRs)}</b><small>{mwh(m.bankKwh)} drawn back × solar rate · not part of the bill</small></div>
+        <div><span>Cost if all from grid</span><b>{rs(m.allGridCostRs)}</b><small>demand × grid rate in every block</small></div>
+        <div><span>Saved vs all grid</span><b className={vsGrid < 0 ? 'ecv-neg' : 'ecv-pos'}>{vsGrid < 0 ? '−' : ''}{rs(Math.abs(vsGrid))}</b>
+          <small>{m.allGridCostRs ? `${((vsGrid / m.allGridCostRs) * 100).toFixed(1)}% below an all-grid bill` : '—'}</small></div>
       </div>
 
-      {periods.length ? (
+      <div className="ecv-bill__split">
+        <ShareBar title="Energy by source" parts={energy.map((e) => ({ ...e, pct: (e.v / eTot) * 100, text: mwh(e.v) }))} />
+        <ShareBar title="Where the money went" parts={cost.map((c) => ({ ...c, pct: (c.v / (bill || 1)) * 100, text: rs(c.v) }))} />
+      </div>
+
+      {m.segments.length ? (
         <div className="ecv-bill__tod">
-          <div className="ecv-bill__subhead">Grid cost by ToD period <span className="eg-muted">· kWh drawn from the grid in each period × that period’s DISCOM rate</span></div>
-          {periods.map((p) => (
-            <div key={p.label} className="ecv-bill__todrow">
-              <span className="ecv-bill__todname">{p.label}<small>{inr(p.hours, p.hours % 1 ? 2 : 0)} h a day</small></span>
-              <span className="num">{mwh(p.grid)}</span><span className="ecv-bill__op">×</span>
-              <span className="num">{p.grid ? rate(p.gridCost / p.grid) : '—'}</span><span className="ecv-bill__op">=</span>
-              <span className="num"><b>{rs(p.gridCost)}</b></span>
-              <span className="ecv-bill__bar"><span className="ecv-bill__fill" style={{ width: `${(p.gridCost / pMax) * 100}%`, background: 'var(--c-grid)' }} /></span>
-              <span className="eg-muted ecv-bill__todiex">{p.iex > 0.5 ? `IEX in this period: ${mwh(p.iex)} at ${rate(p.iexCost / p.iex)}` : 'No IEX in this period'}</span>
-            </div>
-          ))}
+          <div className="ecv-bill__subhead">The bill by ToD segment <span className="eg-muted">· each contiguous ToD period of the day, summed over the month</span></div>
+          <div className="ecv-seg__head"><span>Segment</span><span className="num">Demand</span><span className="num">Grid</span><span className="num">Exchange</span><span className="num">Solar</span><span className="num">Segment bill</span><span /></div>
+          {m.segments.map((s) => {
+            const tot = billTotal(s);
+            const gridRate = s.gridKwh - s.gridUnpricedKwh > 0 ? s.gridCostRs / (s.gridKwh - s.gridUnpricedKwh) : null;
+            return (
+              <div key={s.key} className="ecv-seg__row">
+                <span className="ecv-bill__todname">{segLabel(s.todType, s.key)}<small>{segTime(s.blocks)} · blocks {s.blocks}</small></span>
+                <span className="num">{mwh(s.demandKwh)}</span>
+                <span className="num">{rs(s.gridCostRs)}<small>{mwh(s.gridKwh)} @ {rate(gridRate)}</small></span>
+                <span className="num">{rs(s.exchangeCostRs)}<small>{s.exchangeKwh > 0.5 ? `${mwh(s.exchangeKwh)} @ ${rate(s.exchangeCostRs / s.exchangeKwh)}` : 'none'}</small></span>
+                <span className="num">{rs(s.solarCostRs)}<small>{mwh(s.solarKwh)}</small></span>
+                <span className="num"><b>{rs(tot)}</b><small>{s.demandKwh ? rate(tot / s.demandKwh) : '—'}</small></span>
+                <span className="ecv-bill__bar ecv-seg__bar">
+                  {tot > 0 ? (['grid', 'iex', 'solar'] as const).map((k) => {
+                    const v = k === 'grid' ? s.gridCostRs : k === 'iex' ? s.exchangeCostRs : s.solarCostRs;
+                    return v > 0 ? <span key={k} style={{ width: `${(v / segMax) * 100}%`, background: `var(--c-${k})` }} /> : null;
+                  }) : null}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

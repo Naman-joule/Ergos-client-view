@@ -1,0 +1,99 @@
+// The energy bill, computed the way ergOS's billing service does (calculate_combined in ergOS), block by block.
+// Pure: no imports, used by the node:test suite.
+//
+// For every 15-minute block that has a meter reading:
+//   demand   = max(0, metered kWh)
+//   grid kWh = max(0, demand − solar − banking adjusted discharge − exchange quantity)
+//   grid ₹   = grid kWh × grid rate, where grid rate = tariff × (1 + FPPCA%/100) × (1 + duty%/100)   (app_bill_tariff)
+//   solar ₹  = solar kWh (all mapped generation) × solar rate
+//   exchange ₹ = exchange quantity × landed ₹/kWh            (blocks without a meter reading aren't billed)
+//   banking: adjusted discharge × solar rate = "cost saved by banking" (not part of the bill)
+//   cost if all from grid = demand × grid rate
+//   bill = grid ₹ + solar ₹ + exchange ₹;  average ₹/kWh = bill ÷ demand
+// ToD segments: contiguous runs of the same ToD type in the day's schedule, numbered per type in order
+// (OFFPEAK_1 … NORMAL_1, NORMAL_2 … OFFPEAK_2); a type already numbered in the tariff (normal_1) is used as is.
+
+export interface BillBlock {
+  hasMeter: boolean;
+  demandKwh: number; solarKwh: number; exchangeKwh: number; exchangeCostRs: number;
+  chargeKwh: number; adjDischargeKwh: number; dischargeKwh: number;
+  gridRate: number | null; solarRate: number | null; tod: string | null;
+}
+
+export interface BillTotals {
+  demandKwh: number; gridKwh: number; solarKwh: number; solarSurplusKwh: number; exchangeKwh: number;
+  chargeKwh: number; adjDischargeKwh: number; dischargeKwh: number;
+  gridCostRs: number; solarCostRs: number; exchangeCostRs: number; bankSavedRs: number; allGridCostRs: number;
+  gridUnpricedKwh: number;        // grid kWh in blocks with no grid rate (ergOS leaves them unpriced too)
+}
+export interface BillSegment extends BillTotals { key: string; todType: string; blocks: string }
+export interface BillDay extends BillTotals { segments: Record<string, BillSegment> }
+
+export const zeroBill = (): BillTotals => ({
+  demandKwh: 0, gridKwh: 0, solarKwh: 0, solarSurplusKwh: 0, exchangeKwh: 0, chargeKwh: 0, adjDischargeKwh: 0, dischargeKwh: 0,
+  gridCostRs: 0, solarCostRs: 0, exchangeCostRs: 0, bankSavedRs: 0, allGridCostRs: 0, gridUnpricedKwh: 0,
+});
+export const billTotal = (b: BillTotals) => b.gridCostRs + b.solarCostRs + b.exchangeCostRs;
+export const billRate = (b: BillTotals) => (b.demandKwh > 0 ? billTotal(b) / b.demandKwh : null);
+
+/** Segment (key, base type, "start-end") for each of the 96 blocks, from the day's ToD types. */
+export function todSegments(tod: (string | null)[]): ({ key: string; todType: string; blocks: string } | null)[] {
+  const out: ({ key: string; todType: string; blocks: string } | null)[] = new Array(tod.length).fill(null);
+  const counts = new Map<string, number>();
+  let start = 0;
+  for (let i = 1; i <= tod.length; i++) {
+    if (i < tod.length && tod[i] === tod[start]) continue;
+    const cur = tod[start];
+    if (cur) {
+      const numbered = /_(\d+)$/.test(cur);
+      const n = (counts.get(cur) ?? 0) + 1;
+      if (!numbered) counts.set(cur, n);
+      const seg = { key: numbered ? cur : `${cur}_${n}`, todType: numbered ? cur.replace(/_\d+$/, '') : cur, blocks: `${start + 1}-${i}` };
+      for (let k = start; k < i; k++) out[k] = seg;
+    }
+    start = i;
+  }
+  return out;
+}
+
+function addInto(t: BillTotals, b: BillBlock, grid: number, surplus: number) {
+  const demand = Math.max(0, b.demandKwh);
+  t.demandKwh += demand; t.gridKwh += grid; t.solarKwh += b.solarKwh; t.solarSurplusKwh += surplus;
+  t.exchangeKwh += b.exchangeKwh; t.exchangeCostRs += b.exchangeCostRs;
+  t.chargeKwh += b.chargeKwh; t.adjDischargeKwh += b.adjDischargeKwh; t.dischargeKwh += b.dischargeKwh;
+  if (b.gridRate != null) { t.gridCostRs += grid * b.gridRate; t.allGridCostRs += demand * b.gridRate; } else t.gridUnpricedKwh += grid;
+  if (b.solarRate != null) { t.solarCostRs += b.solarKwh * b.solarRate; t.bankSavedRs += b.adjDischargeKwh * b.solarRate; }
+}
+
+export function billDay(blocks: BillBlock[]): BillDay {
+  const day: BillDay = { ...zeroBill(), segments: {} };
+  const segs = todSegments(blocks.map((b) => b.tod));
+  blocks.forEach((b, i) => {
+    if (!b.hasMeter) return;
+    const demand = Math.max(0, b.demandKwh);
+    const raw = demand - b.solarKwh - b.adjDischargeKwh - b.exchangeKwh;
+    const grid = Math.max(raw, 0);
+    const surplus = raw < 0 ? Math.max(0, b.solarKwh - Math.max(0, demand - b.exchangeKwh)) : 0;
+    addInto(day, b, grid, surplus);
+    const s = segs[i];
+    if (s) {
+      const seg = day.segments[s.key] ??= { ...zeroBill(), ...s };
+      addInto(seg, b, grid, surplus);
+    }
+  });
+  return day;
+}
+
+/** Sum bills (days into a month, months into a range); segments merge by key. */
+export function addBills<T extends BillTotals & { segments?: Record<string, BillSegment> }>(items: T[]): BillTotals & { segments: Record<string, BillSegment> } {
+  const out = { ...zeroBill(), segments: {} as Record<string, BillSegment> };
+  const keys = Object.keys(zeroBill()) as (keyof BillTotals)[];
+  for (const it of items) {
+    for (const k of keys) out[k] += it[k];
+    for (const [sk, s] of Object.entries(it.segments ?? {})) {
+      const o = out.segments[sk] ??= { ...zeroBill(), key: s.key, todType: s.todType, blocks: s.blocks };
+      for (const k of keys) o[k] += s[k];
+    }
+  }
+  return out;
+}

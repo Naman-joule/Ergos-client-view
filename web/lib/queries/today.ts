@@ -133,7 +133,7 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
       [plantId, date]),
     q<BankingRow>(`
       SELECT block, coalesce(charge, 0)::float8 AS charge, coalesce(discharge, 0)::float8 AS discharge,
-             coalesce(adjusted_discharge, discharge, 0)::float8 AS drawn, soc,
+             coalesce(adjusted_discharge, 0)::float8 AS drawn, soc,
              peak_balance, normal_balance, offpeak_balance
       FROM banking WHERE plant_id = $1 AND date = $2::date ORDER BY block`, [plantId, date]),
     q<{ d: string; kwh: number; peak_kw: number }>(`

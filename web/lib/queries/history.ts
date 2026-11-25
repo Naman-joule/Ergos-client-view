@@ -2,6 +2,7 @@ import 'server-only';
 import type { Query } from '../db';
 import { addDays, currentBlock, istToday } from '../time';
 import { allocate, SUPPLY_LAYERS } from '../supply';
+import { billDay, billTotal, type BillDay } from '../bill';
 import { rangeRunStats, type RunStats, type TodInput } from '../tod';
 import { meterShift, normaliseTod, todSchedule } from './today';
 
@@ -43,10 +44,13 @@ export interface HistoryDay {
   bankKwh: number; gridKwh: number; surplusKwh: number;
   peakKw: number; peakBlock: number | null;
   iexLandedRs: number; landedRate: number | null;
-  /** energy costs: IEX at its landed cost (whole purchase), grid kWh at the DISCOM ToD rate for the plant's
-   *  voltage + FPPCA, solar used at the solar tariff where known; banking has no energy cost here */
-  gridCostRs: number; solarCostRs: number; totalCostRs: number;
-  gridUnpricedKwh: number;        // grid kWh in blocks with no ToD rate (not in gridCostRs)
+  /** energy bill the way ergOS bills it (lib/bill.ts): grid kWh × tariff × (1+FPPCA%)(1+duty%), all solar ×
+   *  solar rate, exchange × landed rate in metered blocks; banking saving and all-grid cost alongside */
+  gridCostRs: number; solarCostRs: number; exchangeCostRs: number; totalCostRs: number;
+  bankSavedRs: number; allGridCostRs: number;
+  gridUnpricedKwh: number;        // grid kWh in blocks with no grid rate (not in gridCostRs)
+  pricedBy: 'ergos' | 'fallback' | null;   // ergOS tariff rows (app_bill_tariff), or the ToD schedule fallback
+  bill: BillDay;
 }
 
 /** One 15-minute block (exports). Energy in kWh for the block; rates in ₹/kWh. */
@@ -69,7 +73,7 @@ export interface HistorySeries {
 export interface HistoryData {
   period: HistoryPeriod;
   days: HistoryDay[];             // every date in the range, oldest first (zeros where there is no data)
-  totals: Omit<HistoryDay, 'date' | 'peakBlock'> & { peakDate: string | null; peakBlock: number | null; daysWithData: number };
+  totals: Omit<HistoryDay, 'date' | 'peakBlock' | 'pricedBy' | 'bill'> & { peakDate: string | null; peakBlock: number | null; daysWithData: number };
   series: HistorySeries | null;   // only for ranges up to BLOCK_SERIES_MAX_DAYS
   tod: RunStats[];                // ToD periods summed over the range
   todDays: number;                // days that went into the ToD stats
@@ -93,9 +97,10 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   const plantIds = [plantId, ...mappings.map((m) => m.source_plant_id)];
   const ratio = new Map(mappings.map((m) => [m.source_plant_id, Number(m.s_t_ratio) || 0]));
 
-  const [{ ok: hasSchedFn }] = await q<{ ok: boolean }>(`SELECT to_regprocedure('app_tod_schedule(integer,date)') IS NOT NULL AS ok`);
+  const [{ ok: hasSchedFn, bill: hasBillFn }] = await q<{ ok: boolean; bill: boolean }>(
+    `SELECT to_regprocedure('app_tod_schedule(integer,date)') IS NOT NULL AS ok, to_regprocedure('app_bill_tariff(integer,date)') IS NOT NULL AS bill`);
 
-  const [meter, trades, banking, sched, fallbackSched] = await Promise.all([
+  const [meter, trades, banking, , fallbackSched] = await Promise.all([
     // readings bucketed by their shifted IST timestamp (same as Today), per day and block
     q<{ plant_id: number; d: string; block: number; kwh: number }>(`
       WITH m AS (
@@ -115,41 +120,51 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
       FROM trading_result_block
       WHERE plant_id = $1 AND date BETWEEN $2::date AND $3::date AND upper(type_) = 'BUY'
       GROUP BY 1, 2`, [plantId, from, to]),
-    q<{ d: string; block: number; drawn: number }>(`
-      SELECT date::text AS d, block, sum(coalesce(adjusted_discharge, discharge, 0))::float8 AS drawn
+    // banking as ergOS bills it: adjusted_discharge is what was drawn back (no fallback to discharge)
+    q<{ d: string; block: number; drawn: number; charge: number; discharge: number }>(`
+      SELECT date::text AS d, block, sum(coalesce(adjusted_discharge, 0))::float8 AS drawn,
+             sum(coalesce(charge, 0))::float8 AS charge, sum(coalesce(discharge, 0))::float8 AS discharge
       FROM banking WHERE plant_id = $1 AND date BETWEEN $2::date AND $3::date
       GROUP BY 1, 2`, [plantId, from, to]),
-    // The ToD schedule is set per month. Up to a month, look it up for every day (exact, handles a tariff
-    // change mid-month); beyond that once per month (12 lookups a year instead of 365), and each day uses
-    // its month's schedule. Each lookup scans the state's tariff rows, so per-day lookups over long ranges
-    // ran into the statement timeout on production-sized tariff tables.
-    hasSchedFn
-      ? q<{ d: string; block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null }>(
-          daysBetween(from, to) <= 31
-            ? `SELECT g.d::date::text AS d, t.block, t.tod, t.grid_rate, t.solar_rate
-               FROM generate_series($2::date, $3::date, interval '1 day') AS g(d)
-               CROSS JOIN LATERAL app_tod_schedule($1, g.d::date) t`
-            : `SELECT to_char(g.m, 'YYYY-MM') AS d, t.block, t.tod, t.grid_rate, t.solar_rate
-               FROM (SELECT DISTINCT greatest(date_trunc('month', x)::date, $2::date) AS m
-                     FROM generate_series($2::date, $3::date, interval '1 day') AS s(x)) g
-               CROSS JOIN LATERAL app_tod_schedule($1, g.m) t`, [plantId, from, to])
-      : Promise.resolve([]),
-    hasSchedFn ? Promise.resolve(null) : todSchedule(q, plantId, to),
+    Promise.resolve(null),
+    hasSchedFn || hasBillFn ? Promise.resolve(null) : todSchedule(q, plantId, to),
   ]);
+
+  // ---- tariffs, as ergOS bills: ergOS's own tariff rows (app_bill_tariff: rate × (1+FPPCA%)(1+duty%)); days or
+  // months it has no rows for fall back to the ToD schedule (app_tod_schedule). Up to a month: every day (exact,
+  // handles a mid-month change); longer: once per month (each lookup scans the state's tariff rows, and per-day
+  // lookups over long ranges ran into the statement timeout on production-sized tables).
+  type SchedRow = { d: string; block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null };
+  const monthly = daysBetween(from, to) > 31;
+  const dateList: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dateList.push(d);
+  const keyDates = monthly ? [...new Set(dateList.map((d) => (d.slice(0, 7) + '-01' < from ? from : d.slice(0, 7) + '-01')))] : dateList;
+  const keyOf = (d: string) => (monthly ? d.slice(0, 7) : d);
+  const lookup = (fn: string, keys: string[]) => (keys.length ? q<SchedRow>(`
+      SELECT ${monthly ? "to_char(k, 'YYYY-MM')" : 'k::text'} AS d, t.block, t.tod, t.grid_rate, t.solar_rate
+      FROM unnest($2::date[]) AS k CROSS JOIN LATERAL ${fn}($1, k) t`, [plantId, keys]) : Promise.resolve([] as SchedRow[]));
+  const billRows = hasBillFn ? await lookup('app_bill_tariff', keyDates) : [];
+  const billKeys = new Set(billRows.map((r) => r.d));
+  const missing = keyDates.filter((k) => !billKeys.has(keyOf(k)));
+  const sched = hasSchedFn ? await lookup('app_tod_schedule', missing) : [];
+  const pricedBy = new Map<string, 'ergos' | 'fallback'>([...billKeys].map((k) => [k, 'ergos' as const]));
+  for (const r of sched) if (!pricedBy.has(r.d)) pricedBy.set(r.d, 'fallback');
 
   // ---- per-day, per-block inputs
   type DayIn = { demandKwh: number[]; solarKwh: number[]; iexKwh: number[]; iexLanded: number[]; bankKw: number[];
+                 hasMeter: boolean[]; chargeKwh: number[]; dischargeKwh: number[]; todRaw: (string | null)[];
                  tod: (string | null)[]; gridRate: (number | null)[]; solarRate: (number | null)[]; last: number };
   const dates: string[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
   const byDay = new Map<string, DayIn>(dates.map((d) => [d, {
     demandKwh: z(), solarKwh: z(), iexKwh: z(), iexLanded: z(), bankKw: z(),
+    hasMeter: new Array(96).fill(false), chargeKwh: z(), dischargeKwh: z(), todRaw: new Array(96).fill(null),
     tod: new Array(96).fill(null), gridRate: new Array(96).fill(null), solarRate: new Array(96).fill(null), last: -1,
   }]));
   for (const r of meter) {
     const day = byDay.get(r.d);
     if (!day || r.block < 1 || r.block > 96) continue;
-    if (r.plant_id === plantId) { day.demandKwh[r.block - 1]! += r.kwh; day.last = Math.max(day.last, r.block - 1); }
+    if (r.plant_id === plantId) { day.demandKwh[r.block - 1]! += r.kwh; day.hasMeter[r.block - 1] = true; day.last = Math.max(day.last, r.block - 1); }
     else day.solarKwh[r.block - 1]! += r.kwh * (ratio.get(r.plant_id) ?? 0);
   }
   for (const t of trades) {
@@ -160,9 +175,13 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   }
   for (const b of banking) {
     const day = byDay.get(b.d);
-    if (day && b.block >= 1 && b.block <= 96) day.bankKw[b.block - 1]! += (b.drawn || 0) * 4;
+    if (!day || b.block < 1 || b.block > 96) continue;
+    day.bankKw[b.block - 1]! += (b.drawn || 0) * 4;
+    day.chargeKwh[b.block - 1]! += b.charge || 0;
+    day.dischargeKwh[b.block - 1]! += b.discharge || 0;
   }
-  const schedRows = hasSchedFn ? sched : dates.flatMap((d) => (fallbackSched?.rows ?? []).map((r) => ({ ...r, d })));
+  const schedRows = hasSchedFn || hasBillFn ? [...billRows, ...sched]
+    : dates.flatMap((d) => (fallbackSched?.rows ?? []).map((r) => ({ ...r, d })));
   // rows are keyed by day (YYYY-MM-DD) or, for long ranges, by month (YYYY-MM): spread a month to its days
   const daysFor = (key: string) => (key.length === 7 ? dates.filter((d) => d.startsWith(key)) : [key]);
   for (const s of schedRows) {
@@ -171,6 +190,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
       const day = byDay.get(d);
       if (!day) continue;
       day.tod[s.block - 1] = normaliseTod(s.tod);
+      day.todRaw[s.block - 1] = s.tod ? s.tod.trim() : null;
       day.gridRate[s.block - 1] = s.grid_rate;
       day.solarRate[s.block - 1] = s.solar_rate;
     }
@@ -197,11 +217,13 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     let peakKw = 0, peakBlock: number | null = null;
     for (let i = 0; i <= now; i++) if (demand[i]! > peakKw) { peakKw = demand[i]!; peakBlock = i + 1; }
     const iexKwh = sum(day.iexKwh), iexLandedRs = sum(day.iexLanded);
-    let gridCostRs = 0, solarCostRs = 0, gridUnpricedKwh = 0;
+    const bill = billDay(day.demandKwh.map((kwh, i) => ({
+      hasMeter: day.hasMeter[i]!, demandKwh: kwh, solarKwh: day.solarKwh[i]!, exchangeKwh: day.iexKwh[i]!, exchangeCostRs: day.iexLanded[i]!,
+      chargeKwh: day.chargeKwh[i]!, adjDischargeKwh: day.bankKw[i]! / 4, dischargeKwh: day.dischargeKwh[i]!,
+      gridRate: day.gridRate[i] ?? null, solarRate: day.solarRate[i] ?? null, tod: day.todRaw[i] ?? null,
+    })));
     for (let i = 0; i <= now; i++) {
       const g = a.grid[i]! / 4, sol = a.solarUsed[i]! / 4, gr = day.gridRate[i], sr = day.solarRate[i];
-      if (g > 0) { if (gr != null) gridCostRs += g * gr; else gridUnpricedKwh += g; }
-      if (sol > 0 && sr != null) solarCostRs += sol * sr;
       if (blocks) {
         blocks.push({
           date, block: i + 1, tod: day.tod[i] ?? null,
@@ -212,7 +234,9 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
       }
     }
     days.push({
-      date, blocks: now + 1, gridCostRs, solarCostRs, totalCostRs: iexLandedRs + gridCostRs + solarCostRs, gridUnpricedKwh,
+      date, blocks: now + 1, gridCostRs: bill.gridCostRs, solarCostRs: bill.solarCostRs, exchangeCostRs: bill.exchangeCostRs,
+      totalCostRs: billTotal(bill), bankSavedRs: bill.bankSavedRs, allGridCostRs: bill.allGridCostRs, gridUnpricedKwh: bill.gridUnpricedKwh,
+      pricedBy: pricedBy.get(keyOf(date)) ?? null, bill,
       demandKwh: sum(upTo(day.demandKwh)), iexKwh, iexUsedKwh: sum(upTo(a.iexUsed)) / 4,
       solarKwh: sum(upTo(day.solarKwh)), solarUsedKwh: sum(upTo(a.solarUsed)) / 4,
       bankKwh: sum(upTo(a.bank)) / 4, gridKwh: sum(upTo(a.grid)) / 4, surplusKwh: sum(upTo(a.surplus)) / 4,
@@ -253,7 +277,8 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     solarKwh: add('solarKwh'), solarUsedKwh: add('solarUsedKwh'), bankKwh: add('bankKwh'), gridKwh: add('gridKwh'),
     surplusKwh: add('surplusKwh'), peakKw: peakDay?.peakKw ?? 0, peakDate: peakDay?.date ?? null, peakBlock: peakDay?.peakBlock ?? null,
     iexLandedRs, landedRate: iexKwh ? iexLandedRs / iexKwh : null, daysWithData: withData.length,
-    gridCostRs: add('gridCostRs'), solarCostRs: add('solarCostRs'), totalCostRs: add('totalCostRs'), gridUnpricedKwh: add('gridUnpricedKwh'),
+    gridCostRs: add('gridCostRs'), solarCostRs: add('solarCostRs'), exchangeCostRs: add('exchangeCostRs'), totalCostRs: add('totalCostRs'),
+    bankSavedRs: add('bankSavedRs'), allGridCostRs: add('allGridCostRs'), gridUnpricedKwh: add('gridUnpricedKwh'),
   };
 
   const tod = layout ? rangeRunStats(todInputs, layout) : [];

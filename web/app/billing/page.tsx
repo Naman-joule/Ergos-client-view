@@ -63,18 +63,21 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   ];
   const monthCols: CostColumn[] = [...data.months].reverse().map((m) => ({
     id: m.month, label: monthLabel(m.month).replace(/ (\d{2})(\d{2})$/, " '$2"), title: `${monthLabel(m.month)}${m.partial ? ` · ${m.daysWithData} days so far` : ''}`,
-    parts: parts(m.iexCostRs, m.iexKwh, m.gridCostRs, m.gridKwh, m.solarCostRs, m.solarUsedKwh),
+    parts: parts(m.exchangeCostRs, m.exchangeKwh, m.gridCostRs, m.gridKwh, m.solarCostRs, m.solarKwh),
     rate: m.avgRate, demandKwh: m.demandKwh, href: m.daysWithData ? monthHref(m.month) : undefined, empty: !m.daysWithData,
   }));
   const dayCols: CostColumn[] = sel_m ? data.days.filter((d) => d.date.startsWith(sel_m.month)).map((d) => ({
     id: d.date, label: String(Number(d.date.slice(8))), title: formatDate(d.date),
-    parts: parts(d.iexLandedRs, d.iexKwh, d.gridCostRs, d.gridKwh, d.solarCostRs, d.solarUsedKwh),
+    parts: parts(d.exchangeCostRs, d.bill.exchangeKwh, d.gridCostRs, d.bill.gridKwh, d.solarCostRs, d.bill.solarKwh),
     rate: d.demandKwh ? d.totalCostRs / d.demandKwh : null, demandKwh: d.demandKwh, empty: !d.blocks,
   })) : [];
 
   return (
     <Shell user={user} page="billing" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
       {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} in the last {months} months. Check that the sync is running.</Notice> : null}
+      <Notice>Calculated with ergOS’s billing method: grid kWh × DISCOM tariff × (1 + FPPCA%) × (1 + duty%), all solar × solar tariff,
+        exchange × landed rate, in every metered 15-minute block. Until a month has been checked against ergOS, treat these as estimates.</Notice>
+      {t.fallbackDays > 0 ? <Notice>ergOS has no tariff rows for {sel.plant.name} on {t.fallbackDays} day{t.fallbackDays === 1 ? '' : 's'}; those are priced with the regulatory ToD schedule instead.</Notice> : null}
       {unpriced > 0.5 ? <Notice>{inr(unpriced)} kWh from the grid fall in blocks with no DISCOM ToD rate, so they aren’t costed. The grid cost for those months is understated.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/billing', { client: c.client_id, months })}
@@ -99,12 +102,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <WidgetCell span="full" type="billing.tiles">
           <div className="ecv-tiles-wrap">
             <div className="ecv-tiles ecv-tiles--row" style={{ '--n': 4 } as React.CSSProperties}>
-              <StatTile series="demand" label="Energy cost" icon="rupee" date={range} value={rupees(t.totalCostRs)} unit=""
-                foot={`${t.daysWithData} days with data`} />
+              <StatTile series="demand" label="Total bill" icon="rupee" date={range} value={rupees(t.totalCostRs)} unit=""
+                foot={`${t.daysWithData} days · banking saved ${rupees(t.bankSavedRs)}`} />
               <StatTile series="wind" label="Average cost" icon="calc" date={range} value={r4(t.avgRate)} unit="/ kWh"
                 foot={`Over ${mwhValue(t.demandKwh)} MWh of demand`} />
-              <StatTile series="iex" label="Power exchange" icon="exchange" date={range} value={rupees(t.iexCostRs)} unit=""
-                foot={`${mwhValue(t.iexKwh)} MWh at ${r4(t.iexRate)}/kWh`} />
+              <StatTile series="iex" label="Power exchange" icon="exchange" date={range} value={rupees(t.exchangeCostRs)} unit=""
+                foot={`${mwhValue(t.exchangeKwh)} MWh at ${r4(t.exchangeRate)}/kWh`} />
               <StatTile series="grid" label="Grid" icon="grid" date={range} value={rupees(t.gridCostRs)} unit=""
                 foot={`${mwhValue(t.gridKwh)} MWh at ${r4(t.gridRate)}/kWh`} />
             </div>
@@ -132,7 +135,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                   <input type="hidden" name="months" value={months} />
                   {[...withData].reverse().slice(-6).map((m) => <button key={m.month} type="submit" name="month" value={m.month} aria-pressed={m.month === sel_m.month}>{monthLabel(m.month)}</button>)}
                 </form>) : undefined}>
-              <BillBreakdown m={sel_m} runs={data.todByMonth[sel_m.month]?.runs} monthLabel={monthLabel(sel_m.month)} />
+              <BillBreakdown m={sel_m} monthLabel={monthLabel(sel_m.month)} />
             </Card>
           </WidgetCell>
         ) : null}
@@ -147,12 +150,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
         <WidgetCell span="full" type="billing.months">
           <Card title="Monthly bill summary"
-            sub={`${sel.plant.name} · ${range} · energy charges: IEX at landed cost, grid at the DISCOM ToD rate + FPPCA, solar at its tariff`}>
+            sub={`${sel.plant.name} · ${range} · bill = grid + power exchange + solar, as ergOS calculates it`}>
             <div className="ecv-table-wrap">
               <table className="ecv-table">
                 <thead>
                   <tr>
-                    <th>Month</th><th className="num">Demand MWh</th><th className="num">IEX MWh</th><th className="num">Solar MWh</th>
+                    <th>Month</th><th className="num">Demand MWh</th><th className="num">Exchange MWh</th><th className="num">Solar MWh</th>
                     <th className="num">Banking MWh</th><th className="num">Grid MWh</th><th className="num">IEX cost</th><th className="num">Grid cost</th>
                     <th className="num">Solar cost</th><th className="num ecv-sticky-end">Total · ₹/kWh</th>
                   </tr>
@@ -161,15 +164,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 <tfoot>
                   <tr>
                     <td>Total · {t.months} month{t.months === 1 ? '' : 's'}</td>
-                    <td className="num">{mwhValue(t.demandKwh)}</td><td className="num">{mwhValue(t.iexKwh)}</td><td className="num">{mwhValue(t.solarUsedKwh)}</td>
+                    <td className="num">{mwhValue(t.demandKwh)}</td><td className="num">{mwhValue(t.exchangeKwh)}</td><td className="num">{mwhValue(t.solarKwh)}</td>
                     <td className="num">{mwhValue(t.bankKwh)}</td><td className="num">{mwhValue(t.gridKwh)}</td>
-                    <td className="num">{rupees(t.iexCostRs)}</td><td className="num">{rupees(t.gridCostRs)}</td><td className="num">{rupees(t.solarCostRs)}</td>
+                    <td className="num">{rupees(t.exchangeCostRs)}</td><td className="num">{rupees(t.gridCostRs)}</td><td className="num">{rupees(t.solarCostRs)}</td>
                     <td className="num ecv-sticky-end">{rupees(t.totalCostRs)}<small className="ecv-sub">{r4(t.avgRate)}/kWh</small></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-            <p className="eg-card__sub ecv-footnote">Fixed/demand charges and electricity duty aren’t in the data the client view receives, so they aren’t included. Your DISCOM and IEX invoices remain the official bills.</p>
+            <p className="eg-card__sub ecv-footnote">Energy bill as ergOS calculates it. Fixed/demand charges aren’t part of ergOS’s calculation. Your DISCOM and IEX invoices remain the official bills.</p>
           </Card>
         </WidgetCell>
       </WidgetGrid>
@@ -184,9 +187,9 @@ function MonthRow({ m }: { m: BillMonth }) {
   return (
     <tr>
       <td className="nowrap">{monthLabel(m.month)}{m.partial ? <> <Chip tone="accent">{m.daysWithData} days</Chip></> : null}</td>
-      <td className="num">{mwhValue(m.demandKwh)}</td><td className="num">{mwhValue(m.iexKwh)}</td><td className="num">{mwhValue(m.solarUsedKwh)}</td>
+      <td className="num">{mwhValue(m.demandKwh)}</td><td className="num">{mwhValue(m.exchangeKwh)}</td><td className="num">{mwhValue(m.solarKwh)}</td>
       <td className="num">{mwhValue(m.bankKwh)}</td><td className="num">{mwhValue(m.gridKwh)}</td>
-      <td className="num">{rupees(m.iexCostRs)}</td><td className="num">{rupees(m.gridCostRs)}</td><td className="num">{rupees(m.solarCostRs)}</td>
+      <td className="num">{rupees(m.exchangeCostRs)}</td><td className="num">{rupees(m.gridCostRs)}</td><td className="num">{rupees(m.solarCostRs)}</td>
       <td className="num ecv-sticky-end"><b>{rupees(m.totalCostRs)}</b><small className="ecv-sub">{r4(m.avgRate)}/kWh</small></td>
     </tr>
   );
