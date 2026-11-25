@@ -118,11 +118,20 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
       SELECT date::text AS d, block, sum(coalesce(adjusted_discharge, discharge, 0))::float8 AS drawn
       FROM banking WHERE plant_id = $1 AND date BETWEEN $2::date AND $3::date
       GROUP BY 1, 2`, [plantId, from, to]),
+    // The ToD schedule is set per month. Up to a month, look it up for every day (exact, handles a tariff
+    // change mid-month); beyond that once per month (12 lookups a year instead of 365), and each day uses
+    // its month's schedule. Each lookup scans the state's tariff rows, so per-day lookups over long ranges
+    // ran into the statement timeout on production-sized tariff tables.
     hasSchedFn
-      ? q<{ d: string; block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null }>(`
-          SELECT g.d::date::text AS d, t.block, t.tod, t.grid_rate, t.solar_rate
-          FROM generate_series($2::date, $3::date, interval '1 day') AS g(d)
-          CROSS JOIN LATERAL app_tod_schedule($1, g.d::date) t`, [plantId, from, to])
+      ? q<{ d: string; block: number; tod: string | null; grid_rate: number | null; solar_rate: number | null }>(
+          daysBetween(from, to) <= 31
+            ? `SELECT g.d::date::text AS d, t.block, t.tod, t.grid_rate, t.solar_rate
+               FROM generate_series($2::date, $3::date, interval '1 day') AS g(d)
+               CROSS JOIN LATERAL app_tod_schedule($1, g.d::date) t`
+            : `SELECT to_char(g.m, 'YYYY-MM') AS d, t.block, t.tod, t.grid_rate, t.solar_rate
+               FROM (SELECT DISTINCT greatest(date_trunc('month', x)::date, $2::date) AS m
+                     FROM generate_series($2::date, $3::date, interval '1 day') AS s(x)) g
+               CROSS JOIN LATERAL app_tod_schedule($1, g.m) t`, [plantId, from, to])
       : Promise.resolve([]),
     hasSchedFn ? Promise.resolve(null) : todSchedule(q, plantId, to),
   ]);
@@ -153,12 +162,17 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     if (day && b.block >= 1 && b.block <= 96) day.bankKw[b.block - 1]! += (b.drawn || 0) * 4;
   }
   const schedRows = hasSchedFn ? sched : dates.flatMap((d) => (fallbackSched?.rows ?? []).map((r) => ({ ...r, d })));
+  // rows are keyed by day (YYYY-MM-DD) or, for long ranges, by month (YYYY-MM): spread a month to its days
+  const daysFor = (key: string) => (key.length === 7 ? dates.filter((d) => d.startsWith(key)) : [key]);
   for (const s of schedRows) {
-    const day = byDay.get(s.d);
-    if (!day || s.block < 1 || s.block > 96) continue;
-    day.tod[s.block - 1] = normaliseTod(s.tod);
-    day.gridRate[s.block - 1] = s.grid_rate;
-    day.solarRate[s.block - 1] = s.solar_rate;
+    if (s.block < 1 || s.block > 96) continue;
+    for (const d of daysFor(s.d)) {
+      const day = byDay.get(d);
+      if (!day) continue;
+      day.tod[s.block - 1] = normaliseTod(s.tod);
+      day.gridRate[s.block - 1] = s.grid_rate;
+      day.solarRate[s.block - 1] = s.solar_rate;
+    }
   }
 
   // ---- allocate each day, then roll up

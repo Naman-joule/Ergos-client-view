@@ -20,6 +20,7 @@ SELECT pg_temp.chk((SELECT count(*) FROM plant_processed_meter_data) = 0, 'no us
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation) = 0, 'no user: sees no savings');
 SELECT pg_temp.chk((SELECT count(*) FROM app_session_user()) = 0, 'no user: no session user');
 SELECT pg_temp.chk((SELECT count(*) FROM app_tod_schedule(900001, current_date)) = 0, 'no user: no ToD schedule');
+SELECT pg_temp.chk(to_regclass('iex_market_block') IS NULL OR (SELECT count(*) FROM iex_market_block) = 0, 'no user: no IEX market prices');
 SELECT pg_temp.chk(to_regclass('master_grid_discom_tariff') IS NULL OR NOT has_table_privilege('master_grid_discom_tariff', 'SELECT'), 'app role cannot read master tariffs directly');
 SELECT pg_temp.chk(to_regclass('master_solar_tariff') IS NULL OR NOT has_table_privilege('master_solar_tariff', 'SELECT'), 'app role cannot read master solar tariffs directly');
 
@@ -59,6 +60,8 @@ END $$;
 -- statements without plant_id (ergOS doesn't always fill it): matched by portfolio, never across tenants
 SELECT pg_temp.chk((SELECT count(*) FROM iex_tod_daily_obligation WHERE portfolio_id IN ('DEMO-PF-K1', 'DEMO-PF-K2')) = 0,
                    'films: sees no cement statements, with or without plant_id');
+SELECT pg_temp.chk(to_regclass('iex_market_block') IS NULL OR NOT EXISTS (SELECT 1 FROM day_ahead_market_snapshot) OR (SELECT count(*) FROM iex_market_block) > 0, 'films: reads IEX market prices (market-wide)');
+SELECT pg_temp.chk(to_regclass('day_ahead_market_snapshot') IS NULL OR NOT has_table_privilege('day_ahead_market_snapshot', 'INSERT'), 'app role cannot write IEX market prices');
 
 -- ---------------------------------------------------------------- single-plant user (900005)
 SELECT set_config('app.user_id', '900005', false);

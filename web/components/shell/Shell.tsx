@@ -21,7 +21,7 @@ function syncLabel(m: number | null) {
 }
 
 export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
-  user: SessionUser; page: 'today' | 'savings' | 'history' | 'billing'; liveBlock: number; syncLag: number | null;
+  user: SessionUser; page: 'today' | 'savings' | 'history' | 'billing' | 'iex'; liveBlock: number; syncLag: number | null;
   themeMode: 'dark' | 'light'; children: ReactNode;
 }) {
   const stale = syncLag === null || syncLag > SYNC_STALE_MINUTES;
@@ -55,14 +55,20 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
               <Icon name="receipt" size={19} />Billing &amp; costing
             </Link>
           )}
-          <div className="eg-overline eg-nav__group">Coming next</div>
-          <span className="eg-nav__item ecv-nav-soon" aria-disabled="true"><Icon name="antenna" size={19} />IEX prices</span>
+          {user.permissions.has('view_iex') && (
+            <>
+              <div className="eg-overline eg-nav__group">Market</div>
+              <Link className="eg-nav__item" href="/iex-prices" aria-current={page === 'iex' ? 'page' : undefined}>
+                <Icon name="antenna" size={19} />IEX prices
+              </Link>
+            </>
+          )}
         </nav>
         <div className="eg-side__foot"><b>Joulewise</b>Energy management platform</div>
       </aside>
       <main className="eg-main">
         <header className="eg-topbar">
-          <div className="eg-crumbs">Dashboard <Icon name="chevron-right" size={14} /> <b>{({ today: 'Today', savings: 'Savings', history: 'History', billing: 'Billing & costing' } as const)[page]}</b></div>
+          <div className="eg-crumbs">Dashboard <Icon name="chevron-right" size={14} /> <b>{({ today: 'Today', savings: 'Savings', history: 'History', billing: 'Billing & costing', iex: 'IEX prices' } as const)[page]}</b></div>
           <div className="eg-topbar__end">
             <Chip lg><LiveDot />Live · {blockLabel(liveBlock)}</Chip>
             <Chip lg tone={stale ? 'warning' : 'default'} title="Data is copied from ergOS every 15 minutes">

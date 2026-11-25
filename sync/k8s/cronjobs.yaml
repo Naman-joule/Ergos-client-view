@@ -1,5 +1,5 @@
 # Secret "ergos-view-sync" must hold ERGOS_DATABASE_URL and TARGET_DATABASE_URL
-# (and optionally MASTER_DATABASE_URL, a read-only user on the regulatory master DB)
+# (and optionally MASTER_DATABASE_URL and IEX_DATABASE_URL, read-only users on the regulatory master and IEX DBs)
 # (optionally SYNC_WINDOW_DAYS, SYNC_STALE_MINUTES). Create it with kubectl, never commit it:
 #   kubectl create secret generic ergos-view-sync --from-env-file=sync/.env
 # Image: build on the node (or push to your registry) with a fixed tag, e.g.

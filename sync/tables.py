@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 Mode = Literal["upsert", "window", "replace"]
-Source = Literal["ergos", "master"]
+Source = Literal["ergos", "master", "iex"]
 
 EVERY = frozenset({"fast", "slow"})
 FAST = frozenset({"fast"})
@@ -65,6 +65,13 @@ TABLES: tuple[Table, ...] = (
                       " AND year >= extract(year FROM current_date)::int - 1"),
 
     # ---- fast tier (every 15 minutes): rolling windows ----------------------------------------
+    # IEX market prices (IEX_DATABASE_URL): the same for every client. Window from 3 days back, which also
+    # picks up tomorrow's DAM/GDAM once IEX publishes them and RTM as it clears through the day.
+    Table("day_ahead_market_snapshot", "window", FAST, ("id",), date_column="date", window_days=3, source="iex"),
+    Table("real_time_market_snapshot", "window", FAST, ("id",), date_column="date", window_days=3, source="iex"),
+    Table("green_day_ahead_market_snapshot", "window", FAST, ("id",), date_column="date", window_days=3, source="iex"),
+
+
     Table("plant_processed_meter_data", "window", FAST, ("id",),
           date_column="date", plant_column="plant_id"),
     Table("trading_result", "window", FAST, ("id",),
