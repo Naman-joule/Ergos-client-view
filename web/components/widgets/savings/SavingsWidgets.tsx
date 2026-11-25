@@ -61,7 +61,7 @@ function SavingsFolder({ data, plant, period, title }: Ctx & { title?: string })
       )}
       <Track value={t.landedRate && t.benchmarkRate ? t.landedRate / t.benchmarkRate : 0}
         left={`Landed ${t.landedRate !== null ? fmtRate(t.landedRate) : '—'}`} leftNote="What you paid via IEX"
-        right={`Benchmark ${t.benchmarkRate !== null ? fmtRate(t.benchmarkRate) : '—'}`} rightNote="What the grid would have cost" />
+        right={`Benchmark ${t.benchmarkRate !== null ? fmtRate(t.benchmarkRate) : '—'}`} rightNote={t.estimatedDays ? `What the grid would have cost · ${t.estimatedDays} day${t.estimatedDays === 1 ? "" : "s"} estimated` : "What the grid would have cost"} />
     </Folder>
   );
 }
@@ -77,7 +77,7 @@ function SavingsTiles({ data, period, tiles }: Ctx & { tiles: readonly string[] 
       case 'landed': return <StatTile key={k} series="gov" label="Avg landed tariff" icon="trend" date="Weighted by volume"
         value={t.landedRate !== null ? `₹${t.landedRate.toFixed(4)}` : '—'} unit="/ kWh" foot="Includes STU, CTU, CSS, ED and losses" />;
       case 'benchmark': return <StatTile key={k} series="grid" label="Grid benchmark" icon="shield" date="DISCOM"
-        value={t.benchmarkRate !== null ? `₹${t.benchmarkRate.toFixed(4)}` : '—'} unit="/ kWh" foot="ToD weighted baseline" />;
+        value={t.benchmarkRate !== null ? `₹${t.benchmarkRate.toFixed(4)}` : '—'} unit="/ kWh" foot={t.estimatedDays ? `ToD weighted · ${t.estimatedDays} day${t.estimatedDays === 1 ? "" : "s"} estimated` : "ToD weighted baseline"} />;
       case 'savings': return <StatTile key={k} series="iex" label="Net savings" icon="rupee" date={range}
         value={rupees(t.savings)} foot={t.best ? `Best day ${formatDayMonth(t.best.trade_date)}` : '—'} />;
       case 'percent_below': return <StatTile key={k} series="solar" label="Below benchmark" icon="arrow-up" date={range}
@@ -110,7 +110,7 @@ function SavingsDaily({ data, plant, period, title }: Ctx & { title?: string }) 
       <SavingsChart labels={labels} savings={savings} volume={volume} height={320}
         days={data.rows.map((r) => ({
           label: formatWeekday(r.trade_date), savings: r.net_savings_per_day || 0, volume: r.volume_cleared_kwh || 0,
-          landed: r.avg_landed_iex_tariff, grid: r.avg_grid_tariff, pct: r.percent_below_grid, locked: r.is_locked,
+          landed: r.avg_landed_iex_tariff, grid: r.avg_grid_tariff, pct: r.percent_below_grid, locked: r.is_locked, estimated: !!r.benchmark_estimated,
         }))} />
     </Card>
   );
@@ -267,9 +267,10 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
                   <td className="num">{inr(r.volume_cleared_kwh)}</td>
                   <td className="num">{r.avg_landed_iex_tariff !== null ? r.avg_landed_iex_tariff.toFixed(4) : '—'}</td>
                   <td className="num">{inr(r.iex_total_cost, 2)}</td>
-                  <td className="num">{r.avg_grid_tariff !== null ? r.avg_grid_tariff.toFixed(4) : '—'}</td>
-                  <td className="num">{inr(r.grid_total_cost, 2)}</td>
-                  <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}>{inr(r.net_savings_per_day, 2)}</td>
+                  <td className="num" title={r.benchmark_estimated ? 'Estimated: ergOS has no benchmark for this day' : undefined}>
+                    {r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{r.avg_grid_tariff !== null ? r.avg_grid_tariff.toFixed(4) : '—'}</td>
+                  <td className="num">{r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{inr(r.grid_total_cost, 2)}</td>
+                  <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}>{r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{inr(r.net_savings_per_day, 2)}</td>
                   <td className="num">{r.percent_below_grid !== null ? `${r.percent_below_grid.toFixed(2)}%` : '—'}</td>
                   <td className="ecv-sticky-end"><DayPdf row={r} plantId={plant.plant_id} /></td>
                 </tr>

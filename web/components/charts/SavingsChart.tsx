@@ -14,6 +14,7 @@ export interface SavingsDay {
   grid: number | null;      // ₹/kWh benchmark
   pct: number | null;       // % below grid
   locked: boolean;
+  estimated?: boolean;     // benchmark estimated by the client view (ergOS had none)
 }
 
 // must match savingsChart() in the runtime
@@ -70,7 +71,7 @@ export function SavingsChart({ labels, savings, volume, days, height = 320 }: {
           <dl className="ecv-sv__rows">
             <div><dt><span className="eg-swatch ecv-swatch-line" data-series="grid" />Volume cleared</dt><dd>{inr(d.volume)} kWh</dd></div>
             <div><dt>IEX landed</dt><dd>{d.landed != null ? `₹${d.landed.toFixed(4)}/kWh` : '—'}</dd></div>
-            <div><dt>Grid benchmark</dt><dd>{d.grid ? `₹${d.grid.toFixed(4)}/kWh` : '—'}</dd></div>
+            <div><dt>Grid benchmark{d.estimated ? ' (est.)' : ''}</dt><dd>{d.grid ? `₹${d.grid.toFixed(4)}/kWh` : '—'}</dd></div>
             <div><dt>Below grid</dt><dd>{d.pct != null && d.grid ? `${d.pct.toFixed(1)}%` : '—'}</dd></div>
           </dl>
         </div>

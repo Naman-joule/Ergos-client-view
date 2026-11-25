@@ -42,6 +42,8 @@ export interface SavingsRow {
   net_savings_per_day: number; percent_below_grid: number | null;
   excel_file_path: string | null; statement_docx_path: string | null; pdf_report_path: string | null; zip_bundle_path: string | null;
   is_locked: boolean;
+  /** true when ergOS had no grid benchmark for the day and the client view estimated it (see estimateBenchmarks) */
+  benchmark_estimated?: boolean;
 }
 
 export const CHARGE_COLUMNS = [
@@ -60,7 +62,7 @@ export type ChargeKey = (typeof CHARGE_COLUMNS)[number][0];
 export interface SavingsTotals {
   volumeKwh: number; iexCost: number; gridCost: number; savings: number;
   landedRate: number | null; benchmarkRate: number | null; percentBelow: number | null;
-  tradeDays: number; best: SavingsRow | null; negativeDays: number; allLocked: boolean;
+  tradeDays: number; best: SavingsRow | null; negativeDays: number; allLocked: boolean; estimatedDays: number;
   energyCharge: number; charges: Record<ChargeKey, number>;
 }
 
@@ -120,9 +122,48 @@ export function totalsOf(rows: SavingsRow[]): SavingsTotals {
     best,
     negativeDays: rows.filter((r) => n(r.net_savings_per_day) < 0).length,
     allLocked: rows.every((r) => r.is_locked),
+    estimatedDays: rows.filter((r) => r.benchmark_estimated).length,
     energyCharge: sum('iex_energy_charge'),
     charges,
   };
+}
+
+/**
+ * ergOS sometimes stores a day with no grid benchmark (avg_grid_tariff and grid_total_cost 0), e.g. when it
+ * found no DISCOM tariff for the plant. Showing ₹0 makes the savings meaningless, so for those days the
+ * benchmark is estimated the same way ergOS defines it: each cleared 15-minute block priced at the plant's
+ * DISCOM ToD rate for its voltage level plus FPPCA (app_tod_schedule, migrations 005/006), weighted by the
+ * block's cleared kWh. Without block data for the day, the day's average ToD rate is used. Grid cost, net
+ * savings and % below grid are then recomputed from it, and the row is flagged benchmark_estimated.
+ * Days ergOS did price are never touched.
+ */
+export async function estimateBenchmarks(q: Query, plantId: number, rows: SavingsRow[]): Promise<SavingsRow[]> {
+  const missing = rows.filter((r) => !(r.avg_grid_tariff && r.avg_grid_tariff > 0) && !(r.grid_total_cost && r.grid_total_cost > 0) && r.volume_cleared_kwh > 0);
+  if (!missing.length) return rows;
+  const [{ ok }] = await q<{ ok: boolean }>(`SELECT to_regprocedure('app_tod_schedule(integer,date)') IS NOT NULL AS ok`);
+  if (!ok) return rows;
+  const rates = await q<{ day: string; weighted: number | null; flat: number | null }>(`
+    WITH d AS (SELECT unnest($2::date[]) AS day),
+    s AS (SELECT d.day, t.block, t.grid_rate FROM d CROSS JOIN LATERAL app_tod_schedule($1, d.day) t WHERE t.grid_rate > 0),
+    b AS (SELECT date AS day, block_no, sum(coalesce(cleared_quantity, cleared_quantity_mw * 250))::float8 AS kwh
+          FROM trading_result_block
+          WHERE plant_id = $1 AND date = ANY($2::date[]) AND upper(type_) = 'BUY'
+          GROUP BY 1, 2)
+    SELECT s.day::text AS day,
+           (sum(b.kwh * s.grid_rate) / nullif(sum(b.kwh), 0))::float8 AS weighted,
+           avg(s.grid_rate)::float8 AS flat
+    FROM s LEFT JOIN b ON b.day = s.day AND b.block_no = s.block
+    GROUP BY 1`, [plantId, missing.map((r) => r.trade_date)]);
+  const byDay = new Map(rates.map((r) => [r.day, r.weighted ?? r.flat]));
+  return rows.map((r) => {
+    if (!missing.includes(r)) return r;
+    const rate = byDay.get(r.trade_date);
+    if (!rate || !(rate > 0)) return r;
+    const grid = rate * r.volume_cleared_kwh;
+    const savings = grid - (r.iex_total_cost || 0);
+    return { ...r, avg_grid_tariff: rate, grid_total_cost: grid, net_savings_per_day: savings,
+             percent_below_grid: grid ? (savings / grid) * 100 : null, benchmark_estimated: true };
+  });
 }
 
 export async function loadSavings(q: Query, plantId: number, plantName: string, period: Period, profileDays: number | null): Promise<SavingsData> {
@@ -197,6 +238,7 @@ export async function loadSavings(q: Query, plantId: number, plantName: string, 
     }
   }
 
-  return { rows, totals: totalsOf(rows), tod, heat };
+  const priced = await estimateBenchmarks(q, plantId, rows);
+  return { rows: priced, totals: totalsOf(priced), tod, heat };
 }
 

@@ -66,6 +66,11 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
       {!data.rows.length && latest && !fellBack ? (
         <Notice>No statements for {sel.plant.name} between {formatRange(period.from, period.to)}. Its latest statement is for {formatDate(latest)}. <a className="ecv-link" href={href('/savings', { client: sel.client.client_id, plant: sel.plant.plant_id, from: periodEndingAt(latest).from, to: latest })}>Show that month</a></Notice>
       ) : null}
+      {data.totals.estimatedDays > 0 ? (
+        <Notice>ergOS has no grid benchmark for {data.totals.estimatedDays} day{data.totals.estimatedDays === 1 ? '' : 's'} in this period.
+          For {data.totals.estimatedDays === 1 ? 'it' : 'those days'}, the benchmark, grid cost and savings are estimated from the plant’s DISCOM ToD tariff
+          (its voltage level plus FPPCA, per cleared 15-minute block) and marked ≈. They will be replaced by ergOS’s figures once ergOS prices {data.totals.estimatedDays === 1 ? 'that day' : 'those days'}.</Notice>
+      ) : null}
       {!data.rows.length && !latest ? <Notice>No daily savings statements have been synced for {sel.plant.name} yet. They appear once ergOS locks them, usually the day after trading.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/savings', { client: c.client_id, ...keepRange })}

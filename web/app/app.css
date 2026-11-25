@@ -371,3 +371,4 @@
 .ecv-sheets--period { flex-wrap: wrap; gap: 8px; }
 .ecv-sheets--period .ecv-sheet { height: 30px; padding: 0 12px; font-size: 12.5px; }
 .ecv-sheet--docx { border-color: color-mix(in srgb, var(--c-iex) 45%, var(--line)); }
+.ecv-est { color: var(--warning, var(--ink-muted)); margin-right: 3px; font-weight: 600; }
