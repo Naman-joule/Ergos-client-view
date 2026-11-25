@@ -3,7 +3,7 @@
 # (optionally SYNC_WINDOW_DAYS, SYNC_STALE_MINUTES). Create it with kubectl, never commit it:
 #   kubectl create secret generic ergos-view-sync --from-env-file=sync/.env
 # Image: build on the node (or push to your registry) with a fixed tag, e.g.
-#   docker build -t ergos-view-sync:1 sync/
+#   docker build -t ergos-view-sync:2 sync/
 # A ":latest" tag makes Kubernetes always try to pull from a registry, so a locally built image never starts.
 # Schedules are evaluated in the cluster's time zone; the minutes do not depend on it.
 apiVersion: batch/v1
@@ -26,7 +26,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: sync
-              image: ergos-view-sync:1   # or your-registry/ergos-view-sync:<tag>
+              image: ergos-view-sync:2   # or your-registry/ergos-view-sync:<tag>
               imagePullPolicy: IfNotPresent
               args: ["--tier", "fast"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
@@ -58,7 +58,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: sync
-              image: ergos-view-sync:2   # use the same tag as ergos-view-sync-fast
+              image: ergos-view-sync:2
               imagePullPolicy: IfNotPresent
               args: ["--tier", "fast", "--tables", "iex_tod_daily_obligation", "--backfill-days", "120"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
@@ -84,7 +84,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: sync
-              image: ergos-view-sync:1
+              image: ergos-view-sync:2
               imagePullPolicy: IfNotPresent
               args: ["--tier", "slow"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
@@ -110,7 +110,7 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: freshness
-              image: ergos-view-sync:1
+              image: ergos-view-sync:2
               imagePullPolicy: IfNotPresent
               args: ["--freshness"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
