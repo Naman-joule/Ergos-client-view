@@ -34,6 +34,38 @@ spec:
                 requests: { cpu: 100m, memory: 128Mi }
                 limits: { memory: 512Mi }
 ---
+# ergOS recalculates savings for past days (e.g. the whole month at ~01:45 IST), long after the fast tier's
+# 10-day window has moved on. Twice a day, re-copy the last 120 days of savings statements so late corrections
+# and newly priced days reach the client view; window mode also drops rows ergOS has deleted.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ergos-view-sync-savings
+spec:
+  schedule: "17 3,15 * * *"
+  timeZone: Asia/Kolkata
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+          containers:
+            - name: sync
+              image: ergos-view-sync:2   # use the same tag as ergos-view-sync-fast
+              imagePullPolicy: IfNotPresent
+              args: ["--tier", "fast", "--tables", "iex_tod_daily_obligation", "--backfill-days", "120"]
+              envFrom: [{ secretRef: { name: ergos-view-sync } }]
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { memory: 512Mi }
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
