@@ -42,7 +42,8 @@ export function BillBreakdown({ m, monthLabel }: { m: BillMonth; monthLabel: str
   const eTot = energy.reduce((s, e) => s + e.v, 0) || 1;
   const cost = rows.map((r) => ({ key: r.key, slot: r.slot, label: r.label, v: r.cost }));
   const segMax = Math.max(...m.segments.map((s) => billTotal(s)), 1);
-  const net = m.savedOnUsedRs - m.excessCostRs;
+  const net = m.netVsGridRs;
+  const partial = m.unpricedDemandKwh > 0.5;
 
   return (
     <div className="ecv-bill">
@@ -76,23 +77,26 @@ export function BillBreakdown({ m, monthLabel }: { m: BillMonth; monthLabel: str
         <div title="Like for like: what the energy the plant actually consumed would have cost from the grid, minus what it cost">
           <span>Saved on energy used</span>
           <b className={m.savedOnUsedRs < 0 ? 'ecv-neg' : 'ecv-pos'}>{m.savedOnUsedRs < 0 ? '−' : ''}{rs(Math.abs(m.savedOnUsedRs))}</b>
-          <small>{rs(m.allGridCostRs)} if all from grid{m.allGridCostRs ? ` · ${((m.savedOnUsedRs / m.allGridCostRs) * 100).toFixed(1)}% lower` : ''}</small>
+          <small>{m.allGridPricedRs ? `${((m.savedOnUsedRs / m.allGridPricedRs) * 100).toFixed(1)}% below the all-grid cost of ${rs(m.allGridPricedRs)}` : '—'}</small>
         </div>
         <div title="Energy paid for but not consumed: solar beyond demand at the solar rate, and IEX bought beyond demand at its landed rate">
           <span>Paid for energy beyond demand</span>
-          <b className={m.excessCostRs > 0.5 ? 'ecv-warn' : ''}>{rs(m.excessCostRs)}</b>
-          <small>{m.excessCostRs > 0.5
-            ? [m.solarExcessCostRs > 0.5 ? `surplus solar ${rs(m.solarExcessCostRs)} (${mwh(m.solarSurplusKwh)})` : null,
-               m.exchangeExcessCostRs > 0.5 ? `IEX beyond demand ${rs(m.exchangeExcessCostRs)} (${mwh(m.exchangeExcessKwh)})` : null].filter(Boolean).join(' · ')
-            : 'nothing bought beyond demand'}</small>
+          <b className={m.excessPricedRs > 0.5 ? 'ecv-warn' : ''}>{rs(m.excessPricedRs)}</b>
+          <small>{m.excessPricedRs > 0.5
+            ? [m.solarExcessPricedRs > 0.5 ? `surplus solar ${rs(m.solarExcessPricedRs)} (${mwh(m.solarExcessPricedKwh)})` : null,
+               m.exchangeExcessPricedRs > 0.5 ? `IEX beyond demand ${rs(m.exchangeExcessPricedRs)} (${mwh(m.exchangeExcessPricedKwh)})` : null].filter(Boolean).join(' + ')
+            : 'nothing bought beyond demand'}{partial && m.excessCostRs - m.excessPricedRs > 0.5 ? ` · ${rs(m.excessCostRs)} over the whole month` : ''}</small>
         </div>
-        <div title="Saved on energy used − paid for energy beyond demand = all-grid cost − bill">
+        <div title="Cost if all from grid − the bill, over the same blocks. Equals saved on energy used − paid beyond demand.">
           <span>Net vs all grid</span>
           <b className={net < 0 ? 'ecv-neg' : 'ecv-pos'}>{net < 0 ? '−' : ''}{rs(Math.abs(net))}</b>
-          <small>{net < 0 && m.excessCostRs > 0.5 ? 'the energy bought beyond demand outweighs the saving' : 'saving after paying for any excess'}
-            {m.bankSavedRs > 0.5 ? ` · banking saved ${rs(m.bankSavedRs)} more` : ''}</small>
+          <small>{rs(m.allGridPricedRs)} all-grid − {rs(m.billPricedRs)} bill{partial ? ' (blocks with a grid rate)' : ''}</small>
         </div>
       </div>
+      {partial ? (
+        <p className="eg-muted ecv-bill__note">{mwh(m.unpricedDemandKwh)} of demand fell in blocks with no grid rate. Their {rs(m.unpricedBillRs)} of exchange and solar
+          is in the total bill but left out of the all-grid comparison, which can’t be priced there.</p>
+      ) : null}
 
       <div className="ecv-bill__split">
         <ShareBar title="Energy by source" parts={energy.map((e) => ({ ...e, pct: (e.v / eTot) * 100, text: mwh(e.v) }))} />

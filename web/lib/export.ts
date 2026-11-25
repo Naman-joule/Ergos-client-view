@@ -87,11 +87,11 @@ export async function billingWorkbook(b: BillingData, meta: ExportMeta): Promise
   const note: Row = [t('Calculated as ergOS bills: per metered block, grid kWh = demand − solar − banking adjusted discharge − exchange; grid × tariff × (1+FPPCA%) × (1+duty%); all solar × solar tariff; exchange × landed rate. Bill = grid + exchange + solar.')];
   const head: Row = [H('Month'), H('Days with data'), H('Demand kWh'), H('Grid kWh'), H('Grid ₹/kWh'), H('Grid cost ₹'), H('Exchange kWh'), H('Exchange ₹/kWh'),
     H('Exchange cost ₹'), H('Solar kWh'), H('Solar ₹/kWh'), H('Solar cost ₹'), H('Total bill ₹'), H('Average ₹/kWh'), H('Banking drawn kWh'),
-    H('Cost saved by banking ₹'), H('Cost if all from grid ₹'), H('Saved on energy used ₹'), H('Paid beyond demand ₹'), H('Net vs all grid ₹'), H('Note')];
+    H('Cost saved by banking ₹'), H('Cost if all from grid ₹'), H('Bill in compared blocks ₹'), H('Net vs all grid ₹'), H('Saved on energy used ₹'), H('Paid beyond demand ₹'), H('Note')];
   const row = (label: Row[number], m: BillSummary, extra: string | null): Row => [
     label, n(m.daysWithData), kwh(m.demandKwh), kwh(m.gridKwh), rate(m.gridRate), rs(m.gridCostRs), kwh(m.exchangeKwh), rate(m.exchangeRate),
     rs(m.exchangeCostRs), kwh(m.solarKwh), rate(m.solarRate), rs(m.solarCostRs), rs(m.totalCostRs), rate(m.avgRate), kwh(m.bankKwh),
-    rs(m.bankSavedRs), rs(m.allGridCostRs), rs(m.savedOnUsedRs), rs(m.excessCostRs), rs(m.savedOnUsedRs - m.excessCostRs), t(extra)];
+    rs(m.bankSavedRs), rs(m.allGridPricedRs), rs(m.billPricedRs), rs(m.netVsGridRs), rs(m.savedOnUsedRs), rs(m.excessPricedRs), t(extra)];
   const monthly: SheetData = [title, note, [], head];
   for (const m of b.months) {
     const notes = [m.partial ? 'month to date' : null, m.fallbackDays ? `${m.fallbackDays} days priced with the ToD-schedule fallback` : null,
@@ -119,7 +119,7 @@ export async function billingWorkbook(b: BillingData, meta: ExportMeta): Promise
       rs(x.bankSavedRs), rs(x.allGridCostRs), t(x.pricedBy === 'fallback' ? 'ToD schedule (fallback)' : 'ergOS tariff')]);
   }
   return writeXlsxFile([
-    { sheet: 'Monthly', data: monthly, stickyRowsCount: 4, columns: [{ width: 12 }, ...Array.from({ length: 19 }, () => ({ width: 15 })), { width: 34 }] },
+    { sheet: 'Monthly', data: monthly, stickyRowsCount: 4, columns: [{ width: 12 }, ...Array.from({ length: 20 }, () => ({ width: 15 })), { width: 34 }] },
     { sheet: 'ToD segments', data: segs, stickyRowsCount: 4, columns: [{ width: 12 }, { width: 13 }, { width: 11 }, { width: 9 }, ...Array.from({ length: 10 }, () => ({ width: 15 }))] },
     { sheet: 'Day-wise', data: days, stickyRowsCount: 4, columns: [{ width: 13 }, ...Array.from({ length: 11 }, () => ({ width: 15 })), { width: 22 }] },
   ], { fontFamily: 'Calibri', fontSize: 11 }).toBuffer();

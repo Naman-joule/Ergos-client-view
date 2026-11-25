@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Query } from '../db';
 import { addDays, istToday } from '../time';
-import { addBills, billRate, billTotal, excessCost, savedOnUsed, type BillSegment } from '../bill';
+import { addBills, billRate, billTotal, excessCost, netVsGrid, savedOnUsed, type BillSegment } from '../bill';
 import { loadHistory, type HistoryDay } from './history';
 
 // Billing & costing: a plant's energy bill per calendar month, calculated the way ergOS's billing service does
@@ -27,8 +27,13 @@ export interface BillSummary {
   peakKw: number;
   gridCostRs: number; solarCostRs: number; exchangeCostRs: number; totalCostRs: number;
   bankSavedRs: number; allGridCostRs: number;
+  // comparison with an all-grid supply, over blocks that have a grid rate (net = allGridPricedRs − billPricedRs)
+  allGridPricedRs: number; billPricedRs: number; netVsGridRs: number;
   savedOnUsedRs: number;          // all-grid cost − cost of the energy used (like for like)
-  excessCostRs: number;           // paid for energy beyond demand: surplus solar + IEX beyond demand
+  excessPricedRs: number;         // paid for energy beyond demand, in the compared blocks
+  solarExcessPricedRs: number; solarExcessPricedKwh: number; exchangeExcessPricedRs: number; exchangeExcessPricedKwh: number;
+  unpricedDemandKwh: number; unpricedBillRs: number;
+  excessCostRs: number;           // paid for energy beyond demand: surplus solar + IEX beyond demand (all blocks)
   solarExcessCostRs: number; exchangeExcessCostRs: number; exchangeExcessKwh: number;
   avgRate: number | null; exchangeRate: number | null; gridRate: number | null; solarRate: number | null;
   gridUnpricedKwh: number;
@@ -59,7 +64,11 @@ export function summarise(days: HistoryDay[]): BillSummary {
     peakKw: days.reduce((m, d) => Math.max(m, d.peakKw), 0),
     gridCostRs: b.gridCostRs, solarCostRs: b.solarCostRs, exchangeCostRs: b.exchangeCostRs, totalCostRs: billTotal(b),
     bankSavedRs: b.bankSavedRs, allGridCostRs: b.allGridCostRs,
-    savedOnUsedRs: savedOnUsed(b), excessCostRs: excessCost(b),
+    allGridPricedRs: b.allGridPricedRs, billPricedRs: b.billPricedRs, netVsGridRs: netVsGrid(b),
+    savedOnUsedRs: savedOnUsed(b), excessPricedRs: b.excessPricedRs,
+    solarExcessPricedRs: b.solarExcessPricedRs, solarExcessPricedKwh: b.solarExcessPricedKwh,
+    exchangeExcessPricedRs: b.exchangeExcessPricedRs, exchangeExcessPricedKwh: b.exchangeExcessPricedKwh, unpricedDemandKwh: b.unpricedDemandKwh, unpricedBillRs: b.unpricedBillRs,
+    excessCostRs: excessCost(b),
     solarExcessCostRs: b.solarExcessCostRs, exchangeExcessCostRs: b.exchangeExcessCostRs, exchangeExcessKwh: b.exchangeExcessKwh,
     avgRate: billRate(b),
     exchangeRate: b.exchangeKwh ? b.exchangeCostRs / b.exchangeKwh : null,

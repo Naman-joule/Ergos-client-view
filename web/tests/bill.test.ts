@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addBills, billDay, billRate, billTotal, excessCost, savedOnUsed, todSegments, type BillBlock } from '../lib/bill.ts';
+import { addBills, billDay, billRate, billTotal, excessCost, netVsGrid, savedOnUsed, todSegments, type BillBlock } from '../lib/bill.ts';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-3, `${a} vs ${b}`);
 const blk = (o: Partial<BillBlock>): BillBlock => ({
@@ -91,15 +91,45 @@ test('buying beyond demand: the saving on energy used stays positive, the excess
   assert.equal(savedOnUsed(d), 400);                     // real saving on what was consumed
   assert.equal(d.exchangeExcessKwh, 2);
   assert.equal(excessCost(d), 2 * 4 + 40 * 3);           // IEX beyond demand + surplus solar
-  assert.equal(savedOnUsed(d) - excessCost(d), d.allGridCostRs - billTotal(d));   // the net still reconciles
+  assert.equal(savedOnUsed(d) - d.excessPricedRs, netVsGrid(d));
+  assert.equal(netVsGrid(d), d.allGridCostRs - billTotal(d));   // every block priced: same as all-grid − bill
 });
 
-test('blocks without a grid rate are left out of the comparison on both sides', () => {
+test('blocks without a grid rate are left out of the whole comparison, so the net always reconciles', () => {
   const d = billDay([
     blk({ demandKwh: 10, gridRate: 8 }),
-    blk({ demandKwh: 10, exchangeKwh: 10, exchangeCostRs: 50, gridRate: null }),
+    // no grid rate: IEX beyond demand and solar here must not leak into the comparison on one side only
+    blk({ demandKwh: 10, exchangeKwh: 30, exchangeCostRs: 150, solarKwh: 5, solarRate: 3, gridRate: null }),
   ]);
   assert.equal(d.allGridPricedRs, 80);
-  assert.equal(d.usedCostRs, 80);
+  assert.equal(d.billPricedRs, 80);
   assert.equal(savedOnUsed(d), 0);
+  assert.equal(d.excessPricedRs, 0);
+  assert.equal(netVsGrid(d), 0);
+  assert.equal(d.unpricedDemandKwh, 10);
+  assert.equal(d.unpricedBillRs, 150 + 15);
+  assert.equal(billTotal(d), d.billPricedRs + d.unpricedBillRs);
+});
+
+test('net vs all grid = all-grid − bill = saved on used − excess, for any mix of blocks', () => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const blocks = Array.from({ length: 96 * 30 }, () => blk({
+    demandKwh: rnd() * 500 - 20, solarKwh: rnd() < 0.5 ? rnd() * 300 : 0, adjDischargeKwh: rnd() < 0.2 ? rnd() * 50 : 0,
+    exchangeKwh: rnd() < 0.6 ? rnd() * 600 : 0, gridRate: rnd() < 0.9 ? 5 + rnd() * 4 : null, solarRate: rnd() < 0.8 ? 4 : null,
+  })).map((b) => ({ ...b, exchangeCostRs: b.exchangeKwh * (3 + rnd() * 5) }));
+  const d = billDay(blocks);
+  near(netVsGrid(d), savedOnUsed(d) - d.excessPricedRs);
+  near(d.billPricedRs + d.unpricedBillRs, billTotal(d));
+});
+
+test('the excess breakdown adds up to the excess in the compared blocks', () => {
+  const d = billDay([
+    blk({ demandKwh: 100, exchangeKwh: 130, exchangeCostRs: 520, solarKwh: 20, solarRate: 3, gridRate: 8 }),
+    blk({ demandKwh: 100, exchangeKwh: 150, exchangeCostRs: 600, solarKwh: 10, solarRate: 3, gridRate: null }),
+  ]);
+  assert.equal(d.solarExcessPricedRs + d.exchangeExcessPricedRs, d.excessPricedRs);
+  assert.equal(d.exchangeExcessPricedKwh, 30);
+  assert.equal(d.solarExcessPricedKwh, 20);
+  assert.ok(excessCost(d) > d.excessPricedRs);           // the unpriced block's excess is only in the month-wide figure
 });
