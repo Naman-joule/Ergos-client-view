@@ -1,0 +1,10 @@
+# Fails (exit 1) when the last successful fast run is older than SYNC_STALE_MINUTES (default 35).
+# See failures with: systemctl list-units --failed   or   journalctl -u ergos-view-sync-freshness
+[Unit]
+Description=ergOS client view sync freshness check
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm --network host --env-file /etc/ergos-view-sync/sync.env ergos-view-sync:1 --freshness

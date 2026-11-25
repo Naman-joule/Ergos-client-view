@@ -2,6 +2,9 @@
 # (and optionally MASTER_DATABASE_URL, a read-only user on the regulatory master DB)
 # (optionally SYNC_WINDOW_DAYS, SYNC_STALE_MINUTES). Create it with kubectl, never commit it:
 #   kubectl create secret generic ergos-view-sync --from-env-file=sync/.env
+# Image: build on the node (or push to your registry) with a fixed tag, e.g.
+#   docker build -t ergos-view-sync:1 sync/
+# A ":latest" tag makes Kubernetes always try to pull from a registry, so a locally built image never starts.
 # Schedules are evaluated in the cluster's time zone; the minutes do not depend on it.
 apiVersion: batch/v1
 kind: CronJob
@@ -23,7 +26,8 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: sync
-              image: ergos-view-sync:latest   # replace with your registry image
+              image: ergos-view-sync:1   # or your-registry/ergos-view-sync:<tag>
+              imagePullPolicy: IfNotPresent
               args: ["--tier", "fast"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
               resources:
@@ -48,7 +52,8 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: sync
-              image: ergos-view-sync:latest
+              image: ergos-view-sync:1
+              imagePullPolicy: IfNotPresent
               args: ["--tier", "slow"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
               resources:
@@ -73,7 +78,8 @@ spec:
           securityContext: { runAsNonRoot: true, runAsUser: 10001 }
           containers:
             - name: freshness
-              image: ergos-view-sync:latest
+              image: ergos-view-sync:1
+              imagePullPolicy: IfNotPresent
               args: ["--freshness"]
               envFrom: [{ secretRef: { name: ergos-view-sync } }]
               resources:

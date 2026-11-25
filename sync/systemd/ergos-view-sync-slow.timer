@@ -1,0 +1,12 @@
+# Plants, tariffs (ergOS and the regulatory master DB), open access charges: hourly at :11.
+[Unit]
+Description=ergOS client view sync, slow tier, hourly
+
+[Timer]
+OnCalendar=*-*-* *:11:00
+Unit=ergos-view-sync@slow.service
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

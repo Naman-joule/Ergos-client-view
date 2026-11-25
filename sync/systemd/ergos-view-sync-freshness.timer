@@ -1,0 +1,9 @@
+[Unit]
+Description=ergOS client view sync freshness check, every 10 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/10:30
+Unit=ergos-view-sync-freshness.service
+
+[Install]
+WantedBy=timers.target

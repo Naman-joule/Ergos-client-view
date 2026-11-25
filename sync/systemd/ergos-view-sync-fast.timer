@@ -1,0 +1,12 @@
+# Daily savings, meter data, trades, banking, prebid: every 15 minutes (at :04, :19, :34, :49).
+[Unit]
+Description=ergOS client view sync, fast tier, every 15 minutes
+
+[Timer]
+OnCalendar=*-*-* *:04,19,34,49:00
+Unit=ergos-view-sync@fast.service
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

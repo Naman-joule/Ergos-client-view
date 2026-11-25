@@ -1,0 +1,14 @@
+# One sync run: %i is the tier (fast | slow). Started by the timers below; never runs twice at once
+# (systemd does not start a oneshot unit that is still active, and sync.py also takes a DB advisory lock).
+[Unit]
+Description=ergOS client view sync (%i tier)
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# --network host: the container reaches the ergOS databases exactly like the host does (localhost works).
+ExecStart=/usr/bin/docker run --rm --name ergos-view-sync-%i --network host \
+  --env-file /etc/ergos-view-sync/sync.env ergos-view-sync:1 --tier %i
+TimeoutStartSec=600
