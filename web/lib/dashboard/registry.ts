@@ -19,8 +19,11 @@ export const WIDGET_PERMISSION: Record<WidgetType, Permission> = {
   'savings.table': 'view_savings',
 };
 
+/** Widgets retired from the Energy page. Saved client configs may still list them; they're skipped, not errors. */
+const RETIRED: ReadonlySet<string> = new Set(['today.prebid', 'today.banking']);
+
 export function visibleToday(spec: DashboardSpec, perms: ReadonlySet<string>): TodayWidget[] {
-  return spec.pages.today.widgets.filter((w) => perms.has(WIDGET_PERMISSION[w.type]));
+  return spec.pages.today.widgets.filter((w) => !RETIRED.has(w.type) && perms.has(WIDGET_PERMISSION[w.type]));
 }
 export function visibleSavings(spec: DashboardSpec, perms: ReadonlySet<string>): SavingsWidget[] {
   return spec.pages.savings.widgets.filter((w) => perms.has(WIDGET_PERMISSION[w.type]));

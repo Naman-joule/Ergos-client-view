@@ -9,8 +9,6 @@ export const DEFAULT_SPEC: DashboardSpec = {
       widgets: [
         { type: 'today.tiles', span: 'full', tiles: ['demand', 'grid', 'iex', 'solar', 'peak', 'iex_price'] },
         { type: 'today.supply', span: 'full' },
-        { type: 'today.prebid', span: 'full' },
-        { type: 'today.banking', span: 'full' },
       ],
     },
     savings: {
