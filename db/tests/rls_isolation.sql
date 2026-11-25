@@ -102,6 +102,33 @@ DO $$ BEGIN
 EXCEPTION WHEN insufficient_privilege THEN PERFORM pg_temp.chk(true, 'manager: cannot write the global config');
 END $$;
 
+-- ---------------------------------------------------------------- obligation reports: admins write, plant viewers read
+SELECT pg_temp.chk((SELECT count(*) FROM iex_obligation_report WHERE plant_id NOT IN (SELECT app_accessible_plant_ids())) = 0,
+                   'manager: sees obligation reports only for accessible plants');
+DO $$ BEGIN
+  INSERT INTO iex_obligation_report (plant_id, market, delivery_date, file_path, original_name, size_bytes, uploaded_by)
+  VALUES (900001, 'RTM', '2000-01-01', '/iex_obligation/x.pdf', 'x.pdf', 1, app_user_id());
+  PERFORM pg_temp.chk(false, 'manager: cannot upload obligation reports', 'insert succeeded');
+EXCEPTION WHEN insufficient_privilege THEN PERFORM pg_temp.chk(true, 'manager: cannot upload obligation reports');
+END $$;
+SELECT set_config('app.user_id', '900001', false);
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO iex_obligation_report (plant_id, market, delivery_date, file_path, original_name, size_bytes, uploaded_by)
+    VALUES (900001, 'RTM', '2000-01-01', '/iex_obligation/x.pdf', 'x.pdf', 1, app_user_id());
+    RAISE EXCEPTION 'undo';
+  EXCEPTION
+    WHEN raise_exception THEN PERFORM pg_temp.chk(true, 'admin: can upload obligation reports');
+    WHEN insufficient_privilege THEN PERFORM pg_temp.chk(false, 'admin: can upload obligation reports', 'denied');
+  END;
+  BEGIN
+    INSERT INTO iex_obligation_report (plant_id, market, delivery_date, file_path, original_name, size_bytes, uploaded_by)
+    VALUES (900001, 'RTM', '2000-01-02', '/iex_obligation/x.pdf', 'x.pdf', 1, 900002);
+    PERFORM pg_temp.chk(false, 'admin: cannot upload in someone else''s name', 'insert succeeded');
+  EXCEPTION WHEN insufficient_privilege THEN PERFORM pg_temp.chk(true, 'admin: cannot upload in someone else''s name');
+  END;
+END $$;
+
 -- ---------------------------------------------------------------- deactivated user sees nothing
 -- (simulated: a user id that does not exist behaves like an inactive one)
 SELECT set_config('app.user_id', '123456789', false);
