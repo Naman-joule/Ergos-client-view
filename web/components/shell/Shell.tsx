@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Icon } from '../ui/Icon';
 import { Chip, LiveDot } from '../ui/Chip';
 import { ThemeToggle } from './ThemeToggle';
+import { NavToggle } from './NavToggle';
 import { iconSvg } from '@/lib/ui/icon-svg';
 import { blockLabel } from '@/lib/time';
 import { SYNC_STALE_MINUTES } from '@/lib/queries/sync';
@@ -28,7 +29,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
   const role = user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Manager' : 'Client';
   return (
     <div className="eg-screen ecv-screen">
-      <aside className="eg-side">
+      <aside className="eg-side" id="ecv-side">
         <div className="eg-brand">
           <span className="eg-wordmark">erg<i>OS</i></span>
           <span className="eg-chip"><Icon name="shield" size={14} />{role}</span>
@@ -70,13 +71,14 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, children }: {
         <div className="eg-side__foot"><b>Joulewise</b>Energy management platform</div>
       </aside>
       <main className="eg-main">
-        <header className="eg-topbar">
-          <div className="eg-crumbs">Dashboard <Icon name="chevron-right" size={14} /> <b>{({ today: 'Today', savings: 'Savings', history: 'History', billing: 'Billing & costing', iex: 'IEX prices', obligation: 'IEX obligation reports' } as const)[page]}</b></div>
+        <header className="eg-topbar ecv-topbar">
+          <NavToggle />
+          <div className="eg-crumbs"><span className="ecv-crumb-root">Dashboard <Icon name="chevron-right" size={14} /></span> <b>{({ today: 'Today', savings: 'Savings', history: 'History', billing: 'Billing & costing', iex: 'IEX prices', obligation: 'IEX obligation reports' } as const)[page]}</b></div>
           <div className="eg-topbar__end">
-            <Chip lg><LiveDot />Live · {blockLabel(liveBlock)}</Chip>
-            <Chip lg tone={stale ? 'warning' : 'default'} title="Data is copied from ergOS every 15 minutes">
-              <Icon name="clock" size={14} />{syncLabel(syncLag)}
-            </Chip>
+            <span className="ecv-chip-live"><Chip lg><LiveDot /><span className="ecv-hide-sm">Live · </span>{blockLabel(liveBlock)}</Chip></span>
+            <span className="ecv-chip-sync"><Chip lg tone={stale ? 'warning' : 'default'} title={`${syncLabel(syncLag)} · data is copied from ergOS every 15 minutes`}>
+              <Icon name="clock" size={14} /><span className="ecv-hide-sm">{syncLabel(syncLag)}</span>
+            </Chip></span>
             <ThemeToggle moonSvg={iconSvg('moon', 18)} defaultMode={themeMode} />
             <form method="post" action="/logout">
               <button className="eg-icon-btn eg-icon-btn--sm" type="submit" aria-label="Sign out" title="Sign out">

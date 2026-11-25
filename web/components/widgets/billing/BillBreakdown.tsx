@@ -86,11 +86,11 @@ export function BillBreakdown({ m, monthLabel }: { m: BillMonth; monthLabel: str
             return (
               <div key={s.key} className="ecv-seg__row">
                 <span className="ecv-bill__todname">{segLabel(s.todType, s.key)}<small>{segTime(s.blocks)} · blocks {s.blocks}</small></span>
-                <span className="num">{mwh(s.demandKwh)}</span>
-                <span className="num">{rs(s.gridCostRs)}<small>{mwh(s.gridKwh)} @ {rate(gridRate)}</small></span>
-                <span className="num">{rs(s.exchangeCostRs)}<small>{s.exchangeKwh > 0.5 ? `${mwh(s.exchangeKwh)} @ ${rate(s.exchangeCostRs / s.exchangeKwh)}` : 'none'}</small></span>
-                <span className="num">{rs(s.solarCostRs)}<small>{mwh(s.solarKwh)}</small></span>
-                <span className="num"><b>{rs(tot)}</b><small>{s.demandKwh ? rate(tot / s.demandKwh) : '—'}</small></span>
+                <span className="num" data-label="Demand">{mwh(s.demandKwh)}</span>
+                <span className="num" data-label="Grid">{rs(s.gridCostRs)}<small>{mwh(s.gridKwh)} @ {rate(gridRate)}</small></span>
+                <span className="num" data-label="Exchange">{rs(s.exchangeCostRs)}<small>{s.exchangeKwh > 0.5 ? `${mwh(s.exchangeKwh)} @ ${rate(s.exchangeCostRs / s.exchangeKwh)}` : 'none'}</small></span>
+                <span className="num" data-label="Solar">{rs(s.solarCostRs)}<small>{mwh(s.solarKwh)}</small></span>
+                <span className="num" data-label="Segment bill"><b>{rs(tot)}</b><small>{s.demandKwh ? rate(tot / s.demandKwh) : '—'}</small></span>
                 <span className="ecv-bill__bar ecv-seg__bar">
                   {tot > 0 ? (['grid', 'iex', 'solar'] as const).map((k) => {
                     const v = k === 'grid' ? s.gridCostRs : k === 'iex' ? s.exchangeCostRs : s.solarCostRs;

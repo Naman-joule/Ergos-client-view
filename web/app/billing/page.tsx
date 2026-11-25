@@ -101,7 +101,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <WidgetGrid palette={loaded.spec.theme.palette}>
         <WidgetCell span="full" type="billing.tiles">
           <div className="ecv-tiles-wrap">
-            <div className="ecv-tiles ecv-tiles--row" style={{ '--n': 4 } as React.CSSProperties}>
+            <div className="ecv-tiles ecv-tiles--row" style={{ '--n': 4, '--n-md': 2 } as React.CSSProperties}>
               <StatTile series="demand" label="Total bill" icon="rupee" date={range} value={rupees(t.totalCostRs)} unit=""
                 foot={`${t.daysWithData} days · banking saved ${rupees(t.bankSavedRs)}`} />
               <StatTile series="wind" label="Average cost" icon="calc" date={range} value={r4(t.avgRate)} unit="/ kWh"

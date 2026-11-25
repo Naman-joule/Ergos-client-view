@@ -61,7 +61,7 @@ export default async function IexPricesPage({ searchParams }: { searchParams: Pr
       <WidgetGrid palette="harmony">
         <WidgetCell span="full" type="iex.tiles">
           <div className="ecv-tiles-wrap">
-            <div className="ecv-tiles ecv-tiles--row" style={{ '--n': 4 } as React.CSSProperties}>
+            <div className="ecv-tiles ecv-tiles--row" style={{ '--n': 4, '--n-md': 2 } as React.CSSProperties}>
               {data.markets.map((m, i) => (
                 <StatTile key={m.key} series={MARKETS[i]!.slot} label={MARKETS[i]!.label} icon="exchange" date={dayLabel}
                   value={fmt(m.avg)} unit="/ kWh"
