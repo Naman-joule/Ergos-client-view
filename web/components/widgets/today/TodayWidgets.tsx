@@ -91,7 +91,7 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
     switch (k) {
       case 'grid':
         return <StatTile key={k} series="grid" label="Grid" icon="grid" date={day} value={mwhValue(t.gridKwh)} unit="MWh"
-          foot="Residual demand"  footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
+          foot="Residual demand" footChip={<Chip>{pctText(share(t.gridKwh, t.demandKwh))}</Chip>} />;
       case 'iex':
         return <StatTile key={k} series="iex" label="Power exchange" icon="exchange" date={day} value={mwhValue(t.iexKwh)} unit="MWh"
           spark={spark((d) => d.iexMwh)} foot="Share of demand"
@@ -140,66 +140,66 @@ function TodaySupply({ data, plant, title }: Ctx & { title?: string }) {
 }
 
 // ---------------------------------------------------------------------------- prebid
-function TodayPrebid({ data, plant, title }: Ctx & { title?: string }) {
-  const head = title ?? 'Prebid plan against cleared';
-  const sub = `${plant.name} · ${formatDateLong(data.date)}`;
-  if (data.prebid.status === 'none' && !data.iex.some((v) => v > 0)) {
-    return <Card title={head} sub={sub}><Empty title="No prebid plan or cleared trade for this day" icon="file" /></Card>;
-  }
-  const plan = data.prebid.planKw;
-  const plannedKwh = plan ? plan.reduce((a, b) => a + b, 0) / 4 : null;
-  const clearedKwh = data.iex.reduce((a, b) => a + b, 0) / 4;
-  const blocks = data.iex.map((v, i) => (v > 0 ? i + 1 : 0)).filter(Boolean);
-  const dev = plannedKwh ? (clearedKwh - plannedKwh) / plannedKwh : null;
-  const series = [
-    ...(plan ? [{ key: 'gov' as const, label: 'Plan', values: plan, dashed: true, fill: false }] : []),
-    { key: 'iex' as const, label: 'Cleared', values: data.iex },
-    { key: 'demand' as const, label: 'Demand', values: data.demand.map((v, i) => (i <= data.now ? v : null)), fill: false },
-  ];
-  return (
-    <Card title={head} sub={sub} actions={<>
-      {data.prebid.status === 'none' ? <Chip>No prebid plan</Chip> : null}
-      {data.prebid.markets.length ? <Chip mono>{[...new Set(data.prebid.markets)].join(' + ')}</Chip> : null}
-      {dev !== null ? <Chip tone={Math.abs(dev) > 0.1 ? 'warning' : 'accent'}>{Math.abs(dev) > 0.1 ? 'Deviation ' : 'On plan '}{dev >= 0 ? '+' : '−'}{Math.abs(dev * 100).toFixed(1)}%</Chip> : null}
-    </>}>
-      <div className="ecv-kv">
-        <div><span>Planned</span><b>{plannedKwh !== null ? `${mwhValue(plannedKwh)} MWh` : '—'}</b></div>
-        <div><span>Cleared</span><b>{mwhValue(clearedKwh)} MWh</b></div>
-        <div><span>Cleared blocks</span><b>{blocks.length ? `${blockRange(blocks[0]!, blocks[blocks.length - 1]!)} · ${blockStart(blocks[0]!)}–${blockEnd(blocks[blocks.length - 1]!)}` : 'None'}</b></div>
-      </div>
-      {data.prebid.status === 'unrecognised'
-        ? <Empty title="Plan format not recognised" icon="file">A prebid plan exists for this day, but its shape could not be read. Cleared volume is shown below.</Empty>
-        : null}
-      <TrendChart series={series} now={data.now >= 0 ? data.now : null} height={280} label={`Prebid plan, cleared IEX and demand on ${formatDateLong(data.date)}, kW per block`} />
-    </Card>
-  );
-}
+// function TodayPrebid({ data, plant, title }: Ctx & { title?: string }) {
+//   const head = title ?? 'Prebid plan against cleared';
+//   const sub = `${plant.name} · ${formatDateLong(data.date)}`;
+//   if (data.prebid.status === 'none' && !data.iex.some((v) => v > 0)) {
+//     return <Card title={head} sub={sub}><Empty title="No prebid plan or cleared trade for this day" icon="file" /></Card>;
+//   }
+//   const plan = data.prebid.planKw;
+//   const plannedKwh = plan ? plan.reduce((a, b) => a + b, 0) / 4 : null;
+//   const clearedKwh = data.iex.reduce((a, b) => a + b, 0) / 4;
+//   const blocks = data.iex.map((v, i) => (v > 0 ? i + 1 : 0)).filter(Boolean);
+//   const dev = plannedKwh ? (clearedKwh - plannedKwh) / plannedKwh : null;
+//   const series = [
+//     ...(plan ? [{ key: 'gov' as const, label: 'Plan', values: plan, dashed: true, fill: false }] : []),
+//     { key: 'iex' as const, label: 'Cleared', values: data.iex },
+//     { key: 'demand' as const, label: 'Demand', values: data.demand.map((v, i) => (i <= data.now ? v : null)), fill: false },
+//   ];
+//   return (
+//     <Card title={head} sub={sub} actions={<>
+//       {data.prebid.status === 'none' ? <Chip>No prebid plan</Chip> : null}
+//       {data.prebid.markets.length ? <Chip mono>{[...new Set(data.prebid.markets)].join(' + ')}</Chip> : null}
+//       {dev !== null ? <Chip tone={Math.abs(dev) > 0.1 ? 'warning' : 'accent'}>{Math.abs(dev) > 0.1 ? 'Deviation ' : 'On plan '}{dev >= 0 ? '+' : '−'}{Math.abs(dev * 100).toFixed(1)}%</Chip> : null}
+//     </>}>
+//       <div className="ecv-kv">
+//         <div><span>Planned</span><b>{plannedKwh !== null ? `${mwhValue(plannedKwh)} MWh` : '—'}</b></div>
+//         <div><span>Cleared</span><b>{mwhValue(clearedKwh)} MWh</b></div>
+//         <div><span>Cleared blocks</span><b>{blocks.length ? `${blockRange(blocks[0]!, blocks[blocks.length - 1]!)} · ${blockStart(blocks[0]!)}–${blockEnd(blocks[blocks.length - 1]!)}` : 'None'}</b></div>
+//       </div>
+//       {data.prebid.status === 'unrecognised'
+//         ? <Empty title="Plan format not recognised" icon="file">A prebid plan exists for this day, but its shape could not be read. Cleared volume is shown below.</Empty>
+//         : null}
+//       <TrendChart series={series} now={data.now >= 0 ? data.now : null} height={280} label={`Prebid plan, cleared IEX and demand on ${formatDateLong(data.date)}, kW per block`} />
+//     </Card>
+//   );
+// }
 
 // ---------------------------------------------------------------------------- banking
-function TodayBanking({ data, plant, title }: Ctx & { title?: string }) {
-  const head = title ?? 'Banking';
-  const sub = `${plant.name} · ${formatDateLong(data.date)}`;
-  if (!data.banking.length) return <Card title={head} sub={sub}><Empty title="No banking for this plant on this day" icon="battery" /></Card>;
-  const last = data.banking[data.banking.length - 1]!;
-  const charged = data.banking.reduce((a, r) => a + r.charge, 0);
-  const discharged = data.banking.reduce((a, r) => a + r.discharge, 0);
-  const soc = new Array<number | null>(96).fill(null);
-  for (const r of data.banking) if (r.block >= 1 && r.block <= 96) soc[r.block - 1] = r.soc;
-  const f = (v: number | null) => (v === null ? '—' : inr(v, 0));
-  return (
-    <Card title={head} sub={`${sub} · balances at ${blockEnd(last.block)} · Block ${last.block}`}>
-      <div className="ecv-kv">
-        <div><span>Peak balance</span><b>{f(last.peak_balance)} kWh</b></div>
-        <div><span>Normal balance</span><b>{f(last.normal_balance)} kWh</b></div>
-        <div><span>Off-peak balance</span><b>{f(last.offpeak_balance)} kWh</b></div>
-        <div><span>Charged</span><b>{inr(charged)} kWh</b></div>
-        <div><span>Discharged</span><b>{inr(discharged)} kWh</b></div>
-      </div>
-      <TrendChart series={[{ key: 'battery', label: 'State of charge', values: soc }]} unit="kWh" height={220} now={last.block - 1}
-        label={`Banked energy state of charge on ${formatDateLong(data.date)}, kWh per block`} />
-    </Card>
-  );
-}
+// function TodayBanking({ data, plant, title }: Ctx & { title?: string }) {
+//   const head = title ?? 'Banking';
+//   const sub = `${plant.name} · ${formatDateLong(data.date)}`;
+//   if (!data.banking.length) return <Card title={head} sub={sub}><Empty title="No banking for this plant on this day" icon="battery" /></Card>;
+//   const last = data.banking[data.banking.length - 1]!;
+//   const charged = data.banking.reduce((a, r) => a + r.charge, 0);
+//   const discharged = data.banking.reduce((a, r) => a + r.discharge, 0);
+//   const soc = new Array<number | null>(96).fill(null);
+//   for (const r of data.banking) if (r.block >= 1 && r.block <= 96) soc[r.block - 1] = r.soc;
+//   const f = (v: number | null) => (v === null ? '—' : inr(v, 0));
+//   return (
+//     <Card title={head} sub={`${sub} · balances at ${blockEnd(last.block)} · Block ${last.block}`}>
+//       <div className="ecv-kv">
+//         <div><span>Peak balance</span><b>{f(last.peak_balance)} kWh</b></div>
+//         <div><span>Normal balance</span><b>{f(last.normal_balance)} kWh</b></div>
+//         <div><span>Off-peak balance</span><b>{f(last.offpeak_balance)} kWh</b></div>
+//         <div><span>Charged</span><b>{inr(charged)} kWh</b></div>
+//         <div><span>Discharged</span><b>{inr(discharged)} kWh</b></div>
+//       </div>
+//       <TrendChart series={[{ key: 'battery', label: 'State of charge', values: soc }]} unit="kWh" height={220} now={last.block - 1}
+//         label={`Banked energy state of charge on ${formatDateLong(data.date)}, kWh per block`} />
+//     </Card>
+//   );
+// }
 
 // ---------------------------------------------------------------------------- dispatch
 export function TodayWidgetView({ w, ctx }: { w: TodayWidget; ctx: Ctx }) {
@@ -207,7 +207,7 @@ export function TodayWidgetView({ w, ctx }: { w: TodayWidget; ctx: Ctx }) {
     case 'today.folder': return <TodayFolder {...ctx} title={w.title} />;
     case 'today.tiles': return <TodayTiles {...ctx} tiles={w.tiles} />;
     case 'today.supply': return <TodaySupply {...ctx} title={w.title} />;
-    case 'today.prebid': return <TodayPrebid {...ctx} title={w.title} />;
-    case 'today.banking': return <TodayBanking {...ctx} title={w.title} />;
+    // case 'today.prebid': return <TodayPrebid {...ctx} title={w.title} />;
+    // case 'today.banking': return <TodayBanking {...ctx} title={w.title} />;
   }
 }
