@@ -43,7 +43,22 @@ export interface HistoryDay {
   bankKwh: number; gridKwh: number; surplusKwh: number;
   peakKw: number; peakBlock: number | null;
   iexLandedRs: number; landedRate: number | null;
+  /** energy costs: IEX at its landed cost (whole purchase), grid kWh at the DISCOM ToD rate for the plant's
+   *  voltage + FPPCA, solar used at the solar tariff where known; banking has no energy cost here */
+  gridCostRs: number; solarCostRs: number; totalCostRs: number;
+  gridUnpricedKwh: number;        // grid kWh in blocks with no ToD rate (not in gridCostRs)
 }
+
+/** One 15-minute block (exports). Energy in kWh for the block; rates in ₹/kWh. */
+export interface HistoryBlock {
+  date: string; block: number; tod: string | null;
+  demandKwh: number; iexKwh: number; iexUsedKwh: number; solarKwh: number; solarUsedKwh: number;
+  bankKwh: number; gridKwh: number; surplusKwh: number;
+  iexRate: number | null; gridRate: number | null; solarRate: number | null;
+}
+
+/** One ToD period of one day (exports); `date` is null for the all-days total. */
+export interface HistoryTodRow { date: string | null; stats: RunStats }
 
 export interface HistorySeries {
   /** kW per block across the range (days x 96), null where a day has no data yet */
@@ -58,6 +73,8 @@ export interface HistoryData {
   series: HistorySeries | null;   // only for ranges up to BLOCK_SERIES_MAX_DAYS
   tod: RunStats[];                // ToD periods summed over the range
   todDays: number;                // days that went into the ToD stats
+  blocks?: HistoryBlock[];        // with { detail: true }
+  todByDay?: HistoryTodRow[];     // with { detail: true }: each day's ToD periods, then the all-days rows
   hasSolar: boolean;
   hasBank: boolean;
 }
@@ -65,7 +82,7 @@ export interface HistoryData {
 const z = () => new Array<number>(96).fill(0);
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
-export async function loadHistory(q: Query, plantId: number, period: HistoryPeriod): Promise<HistoryData> {
+export async function loadHistory(q: Query, plantId: number, period: HistoryPeriod, opts: { detail?: boolean } = {}): Promise<HistoryData> {
   const { from, to } = period;
   const shift = meterShift();
   const today = istToday();
@@ -148,6 +165,8 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   const days: HistoryDay[] = [];
   const todInputs: TodInput[] = [];
   let layout: { tod: (string | null)[]; gridRate: (number | null)[] } | null = null;
+  const blocks: HistoryBlock[] | undefined = opts.detail ? [] : undefined;
+  const todDates: string[] = [];
   const series: HistorySeries | null = dates.length <= BLOCK_SERIES_MAX_DAYS
     ? { demand: [], iex: [], solar: [], bank: [], grid: [], surplus: [], days: dates } : null;
 
@@ -163,8 +182,22 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     let peakKw = 0, peakBlock: number | null = null;
     for (let i = 0; i <= now; i++) if (demand[i]! > peakKw) { peakKw = demand[i]!; peakBlock = i + 1; }
     const iexKwh = sum(day.iexKwh), iexLandedRs = sum(day.iexLanded);
+    let gridCostRs = 0, solarCostRs = 0, gridUnpricedKwh = 0;
+    for (let i = 0; i <= now; i++) {
+      const g = a.grid[i]! / 4, sol = a.solarUsed[i]! / 4, gr = day.gridRate[i], sr = day.solarRate[i];
+      if (g > 0) { if (gr != null) gridCostRs += g * gr; else gridUnpricedKwh += g; }
+      if (sol > 0 && sr != null) solarCostRs += sol * sr;
+      if (blocks) {
+        blocks.push({
+          date, block: i + 1, tod: day.tod[i] ?? null,
+          demandKwh: day.demandKwh[i]!, iexKwh: day.iexKwh[i]!, iexUsedKwh: a.iexUsed[i]! / 4,
+          solarKwh: day.solarKwh[i]!, solarUsedKwh: sol, bankKwh: a.bank[i]! / 4, gridKwh: g, surplusKwh: a.surplus[i]! / 4,
+          iexRate: day.iexKwh[i] ? day.iexLanded[i]! / day.iexKwh[i]! : null, gridRate: gr ?? null, solarRate: sr ?? null,
+        });
+      }
+    }
     days.push({
-      date, blocks: now + 1,
+      date, blocks: now + 1, gridCostRs, solarCostRs, totalCostRs: iexLandedRs + gridCostRs + solarCostRs, gridUnpricedKwh,
       demandKwh: sum(upTo(day.demandKwh)), iexKwh, iexUsedKwh: sum(upTo(a.iexUsed)) / 4,
       solarKwh: sum(upTo(day.solarKwh)), solarUsedKwh: sum(upTo(a.solarUsed)) / 4,
       bankKwh: sum(upTo(a.bank)) / 4, gridKwh: sum(upTo(a.grid)) / 4, surplusKwh: sum(upTo(a.surplus)) / 4,
@@ -191,6 +224,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
         layers: SUPPLY_LAYERS.map((l) => ({ key: l.key, slot: l.slot, label: l.label, hatch: 'hatch' in l ? l.hatch : undefined, values: values[l.key]! })),
       });
       layout = { tod: day.tod, gridRate: day.gridRate };          // the latest day with a schedule
+      todDates.push(date);
     }
   }
 
@@ -204,12 +238,20 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     solarKwh: add('solarKwh'), solarUsedKwh: add('solarUsedKwh'), bankKwh: add('bankKwh'), gridKwh: add('gridKwh'),
     surplusKwh: add('surplusKwh'), peakKw: peakDay?.peakKw ?? 0, peakDate: peakDay?.date ?? null, peakBlock: peakDay?.peakBlock ?? null,
     iexLandedRs, landedRate: iexKwh ? iexLandedRs / iexKwh : null, daysWithData: withData.length,
+    gridCostRs: add('gridCostRs'), solarCostRs: add('solarCostRs'), totalCostRs: add('totalCostRs'), gridUnpricedKwh: add('gridUnpricedKwh'),
   };
+
+  const tod = layout ? rangeRunStats(todInputs, layout) : [];
+  let todByDay: HistoryTodRow[] | undefined;
+  if (opts.detail && layout) {
+    const lay = layout;
+    todByDay = todInputs.flatMap((inp, k) => rangeRunStats([inp], lay).map((stats) => ({ date: todDates[k]!, stats })));
+    todByDay.push(...tod.map((stats) => ({ date: null, stats })));
+  }
 
   return {
     period, days, totals, series,
-    tod: layout ? rangeRunStats(todInputs, layout) : [],
-    todDays: todInputs.length,
+    tod, todDays: todInputs.length, blocks, todByDay,
     hasSolar: mappings.length > 0,
     hasBank: totals.bankKwh > 0,
   };

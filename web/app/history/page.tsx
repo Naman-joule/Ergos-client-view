@@ -16,7 +16,6 @@ import { Chip } from '@/components/ui/Chip';
 import { Empty, Notice } from '@/components/ui/Empty';
 import { Icon } from '@/components/ui/Icon';
 import { StatTile } from '@/components/ui/StatTile';
-import { CsvButton } from '@/components/ui/CsvButton';
 import { HistoryChart } from '@/components/charts/HistoryChart';
 
 export const dynamic = 'force-dynamic';
@@ -52,15 +51,8 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   const keep: Record<string, string> = period.preset ? { preset: period.preset } : { from: period.from, to: period.to };
   const nDays = daysBetween(period.from, period.to);
 
-  // daily table + CSV, newest first
+  // daily table, newest first
   const rows = [...data.days].reverse();
-  const csv: (string | number | null)[][] = [
-    ['Date', 'Demand (kWh)', 'Power exchange bought (kWh)', 'Power exchange used (kWh)', 'Solar used (kWh)', 'Banking (kWh)',
-     'Grid (kWh)', 'Surplus solar (kWh)', 'Peak demand (kW)', 'Peak at', 'IEX landed (Rs/kWh)', 'IEX landed cost (Rs)', 'Blocks with data'],
-    ...rows.map((d) => [d.date, r0(d.demandKwh), r0(d.iexKwh), r0(d.iexUsedKwh), r0(d.solarUsedKwh), r0(d.bankKwh), r0(d.gridKwh),
-      r0(d.surplusKwh), r0(d.peakKw), d.peakBlock ? blockEnd(d.peakBlock) : null, d.landedRate != null ? d.landedRate.toFixed(4) : null,
-      d.iexLandedRs ? d.iexLandedRs.toFixed(2) : null, d.blocks]),
-  ];
   const hidden = [...(data.hasSolar ? [] : ['solar', 'surplus'] as const), ...(data.hasBank ? [] : ['bank'] as const)];
 
   return (
@@ -120,7 +112,12 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
 
         <WidgetCell span="full" type="history.table">
           <Card title="Daily" sub={`${sel.plant.name} · ${range} · energy in kWh`}
-            actions={<CsvButton rows={csv} filename={`${slug(sel.plant.name)}_${period.from}_to_${period.to}.csv`} />}>
+            actions={
+              <a className="ecv-sheet ecv-sheet--excel ecv-export" download
+                href={`/api/export/energy?plant=${sel.plant.plant_id}&from=${period.from}&to=${period.to}`}
+                title="Excel workbook: Block-wise, Day-wise and ToD-wise sheets">
+                <Icon name="download" size={14} />Download Excel
+              </a>}>
             <div className="ecv-table-wrap">
               <table className="ecv-table">
                 <thead>
@@ -177,5 +174,3 @@ function DayRow({ d, bank, solar, today }: { d: HistoryDay; bank: boolean; solar
   );
 }
 
-const r0 = (v: number) => Math.round(v);
-const slug = (s: string) => s.replace(/[^\w]+/g, '_').replace(/^_|_$/g, '');

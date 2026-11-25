@@ -9,6 +9,7 @@ import { currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
 import { DayPager } from '@/components/shell/DayPager';
+import { Icon } from '@/components/ui/Icon';
 import { ScopeBar } from '@/components/shell/ScopeBar';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { TodayWidgetView } from '@/components/widgets/today/TodayWidgets';
@@ -61,7 +62,14 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/today', { client: c.client_id, date: explicit && explicit !== today ? explicit : null })}
         plantHref={(p) => link({ plant: p.plant_id })}
-        controls={<DayPager date={date} today={today} hrefFor={(d) => link({ date: d })} />} />
+        controls={<>
+          <DayPager date={date} today={today} hrefFor={(d) => link({ date: d })} />
+          <a className="ecv-sheet ecv-sheet--excel ecv-export" download
+            href={`/api/export/energy?plant=${sel.plant.plant_id}&from=${date}&to=${date}`}
+            title="Excel: every 15-minute block, the day's totals and its ToD periods">
+            <Icon name="download" size={14} />Export
+          </a>
+        </>} />
       {widgets.length ? (
         <WidgetGrid palette={loaded.spec.theme.palette}>
           {widgets.map((w) => (

@@ -387,3 +387,5 @@
 .ecv-hist__nodata { font-size: 12px; padding-top: 6px; }
 .ecv-row--empty td { opacity: .7; }
 .ecv-csv { cursor: pointer; font: inherit; height: 30px; padding: 0 12px; font-size: 12.5px; }
+.ecv-export { height: 34px; padding: 0 14px; font-size: 13px; gap: 6px; }
+.ecv-table .ecv-sub { display: block; font-size: 11px; color: var(--ink-muted); font-weight: 400; margin-top: 2px; }
