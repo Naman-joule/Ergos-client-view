@@ -4,7 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY sync.py tables.py ./
-RUN useradd --system --uid 10001 --no-create-home sync
+RUN useradd --system --uid 10001 --no-create-home ecvsync
 USER 10001
 ENTRYPOINT ["python", "sync.py"]
 CMD ["--tier", "fast"]
