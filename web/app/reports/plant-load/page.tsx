@@ -139,7 +139,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
   );
   if (monthMode && monthData) {
     return (
-      <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
+      <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark" dataTo={last}>
         <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
           clientHref={(c) => href('/reports/plant-load', { client: c.client_id, view: 'month', month })}
           plantHref={(p) => monthLink({ plant: p.plant_id })} controls={controls} />
@@ -158,7 +158,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
   const shown = report!.blocks.filter((b) => b.readings > 0 || b.block <= (date === today ? currentBlock() - 1 : 96));
 
   return (
-    <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
+    <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark" dataTo={last}>
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/reports/plant-load', { client: c.client_id })}
         plantHref={(p) => link({ plant: p.plant_id })}

@@ -1,6 +1,7 @@
 import type React from 'react';
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { HISTORY_MAX_DAYS, daysBetween, loadHistory, resolveHistoryPeriod, type HistoryDay } from '@/lib/queries/history';
@@ -32,7 +33,8 @@ export async function RangeView({ sp }: { sp: SP }) {
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     const [loaded, data] = await Promise.all([loadSpec(q, sel.client.client_id), loadHistory(q, sel.plant.plant_id, period)]);
-    return { scope, sel, lag, loaded, data } as const;
+    const dataTo = await lastReading(q, sel.plant.plant_id);
+    return { scope, sel, lag, loaded, data, dataTo } as const;
   });
 
   if (!view.sel) {
@@ -53,7 +55,7 @@ export async function RangeView({ sp }: { sp: SP }) {
   const hidden = [...(data.hasSolar ? [] : ['solar', 'surplus'] as const), ...(data.hasBank ? [] : ['bank'] as const)];
 
   return (
-    <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
+    <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} dataTo={view.dataTo}>
       {period.clamped ? <Notice>Ranges are limited to {HISTORY_MAX_DAYS} days. Showing {range}.</Notice> : null}
       {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} between {range}. Pick another range, or check that the sync is running.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}

@@ -1,6 +1,7 @@
 import type React from 'react';
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { BILLING_MONTH_CHOICES, loadBilling, resolveBillingMonths, type BillMonth } from '@/lib/queries/billing';
@@ -37,7 +38,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     const [loaded, data] = await Promise.all([loadSpec(q, sel.client.client_id), loadBilling(q, sel.plant.plant_id, months)]);
-    return { scope, sel, lag, loaded, data } as const;
+    const dataTo = await lastReading(q, sel.plant.plant_id);
+    return { scope, sel, lag, loaded, data, dataTo } as const;
   });
 
   if (!view.sel) {
@@ -73,7 +75,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   })) : [];
 
   return (
-    <Shell user={user} page="billing" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode}>
+    <Shell user={user} page="billing" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} dataTo={view.dataTo}>
       {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} in the last {months} months. Check that the sync is running.</Notice> : null}
       <Notice>Calculated with ergOS’s billing method: grid kWh × DISCOM tariff × (1 + FPPCA%) × (1 + duty%), all solar × solar tariff,
         exchange × landed rate, in every metered 15-minute block. Until a month has been checked against ergOS, treat these as estimates.</Notice>

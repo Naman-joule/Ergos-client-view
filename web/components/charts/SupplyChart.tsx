@@ -130,7 +130,11 @@ export function SupplyChart({ demand, solarUsed, bank, iex, iexUsed, grid, surpl
           ))}
         </div>
       </div>
-      <div ref={ref} className="eg-chart ecv-chart-gap ecv-supply" />
+      <div className="ecv-supply__wrap">
+        <div ref={ref} className="eg-chart ecv-chart-gap ecv-supply" />
+        {/* the design system labels the area after the last reading "Forecast"; nothing is forecast here */}
+        {now < 95 ? <span className="ecv-supply__after">{isToday ? 'Rest of today' : now < 0 ? 'No readings' : `No readings after ${blockEnd(now + 1)}`}</span> : null}
+      </div>
     </>
   );
 }

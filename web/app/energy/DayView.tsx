@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { latestMeterDate, loadToday } from '@/lib/queries/today';
 import { syncLagMinutes } from '@/lib/queries/sync';
@@ -35,7 +36,8 @@ export async function DayView({ sp }: { sp: SP }) {
       if (latest && latest < today) { date = latest; fellBack = true; }
     }
     const [loaded, data] = await Promise.all([loadSpec(q, sel.client.client_id), loadToday(q, sel.plant.plant_id, date)]);
-    return { scope, sel, lag, loaded, data, date, fellBack } as const;
+    const dataTo = await lastReading(q, sel.plant.plant_id);
+    return { scope, sel, lag, loaded, data, date, fellBack, dataTo } as const;
   });
 
   if (!view.sel) {
@@ -53,7 +55,7 @@ export async function DayView({ sp }: { sp: SP }) {
   };
 
   return (
-    <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} live={date === today}>
+    <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} live={date === today} dataTo={view.dataTo}>
       {loaded.error && user.permissions.has('manage_dashboards') ? <Notice>{loaded.error}</Notice> : null}
       {fellBack ? <Notice>No readings for today yet for {sel.plant.name}. Showing the latest day with data, {formatDateLong(date)}.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}

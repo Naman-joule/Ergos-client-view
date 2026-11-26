@@ -105,7 +105,7 @@ function TodayTiles({ data, tiles }: Ctx & { tiles: readonly string[] }) {
           foot={data.peak ? `at ${blockEnd(data.peak.block)} · Block ${data.peak.block}` : 'No readings'} />;
       case 'demand':
         return <StatTile key={k} series="demand" label="Demand" icon="bolt" date={day} value={mwhValue(t.demandKwh)} unit="MWh"
-          spark={spark((d) => d.demandMwh)} foot={data.isToday ? 'So far today' : 'Whole day'} />;
+          spark={spark((d) => d.demandMwh)} foot={data.now < 0 ? 'No readings' : data.isToday ? `So far today, to ${blockEnd(data.now + 1)}` : data.now >= 95 ? 'Whole day' : `To ${blockEnd(data.now + 1)} (readings stop there)`} />;
       case 'iex_price':
         return <StatTile key={k} series="iex" label="IEX landed price" icon="rupee" date={day}
           value={data.landedRate !== null ? `₹${data.landedRate.toFixed(2)}` : '—'} unit="/ kWh"

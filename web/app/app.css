@@ -3126,3 +3126,19 @@ body {
   background: var(--surface);
   color: var(--ink);
 }
+
+/* Energy supply chart: our own label for the area after the last reading (hide the design system's "Forecast") */
+.ecv-supply__wrap {
+  position: relative;
+}
+.ecv-supply .eg-axis--tag {
+  display: none;
+}
+.ecv-supply__after {
+  position: absolute;
+  top: 72px;
+  right: 22px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  pointer-events: none;
+}

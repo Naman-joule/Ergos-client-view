@@ -25,9 +25,11 @@ function initials(name: string) {
  * The top bar carries the page title and ONE time badge (live / delayed / stale). A stale sync also opens the
  * reserved notice slot under the top bar; the slot is always in the layout, so nothing below it moves.
  */
-export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false, children }: {
+export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false, dataTo, children }: {
   user: SessionUser; page: Page; liveBlock: number; syncLag: number | null;
-  themeMode: 'dark' | 'light'; live?: boolean; children: ReactNode;
+  themeMode: 'dark' | 'light';
+  /** the selected plant's latest meter reading, IST 'YYYY-MM-DD HH:MM': the badge then shows how fresh the plant's data is */
+  dataTo?: string | null; live?: boolean; children: ReactNode;
 }) {
   const state = timeState(syncLag);
   const role = user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Manager' : 'Client';
@@ -42,11 +44,22 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
     { page: 'load' as Page, href: '/reports/plant-load', label: 'Plant load', show: user.permissions.has('view_today') },
     { page: 'reports' as Page, href: '/market/reports', label: 'IEX obligation', show: user.permissions.has('view_iex') },
   ].filter((r) => r.show);
-  const badge = state === 'live'
-    ? { text: `Live · ${blockEnd(liveBlock)}`, title: `Current block B${liveBlock}, ending ${blockEnd(liveBlock)} IST. Data synced ${syncLag != null ? ago(syncLag) : ''}.` }
-    : state === 'delayed'
-      ? { text: `Delayed · ${ago(syncLag!)}`, title: `The last sync from ergOS was ${ago(syncLag!)}. It normally runs every 15 minutes.` }
-      : { text: syncLag === null ? 'Not synced' : `Stale · ${ago(syncLag)}`, title: 'Data has not been synced from ergOS for over 90 minutes.' };
+  // The badge answers "how fresh is what I'm looking at?". With a plant's meter data (dataTo) that's the time of
+  // its latest reading: a logger that uploads once a day is behind even when the sync is healthy. A stale sync
+  // still wins, since then nothing is arriving at all.
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dataAge = dataTo ? (Date.now() - Date.parse(`${dataTo.replace(' ', 'T')}:00+05:30`)) / 60_000 : null;
+  const dataLabel = dataTo ? `${Number(dataTo.slice(8, 10))} ${MON[Number(dataTo.slice(5, 7)) - 1]}, ${dataTo.slice(11)}` : '';
+  const badgeState = state === 'stale' || dataAge == null ? state : dataAge <= 45 ? 'live' : 'delayed';
+  const badge = state === 'stale'
+    ? { text: syncLag === null ? 'Not synced' : `Stale · ${ago(syncLag)}`, title: 'Data has not been synced from ergOS for over 90 minutes.' }
+    : dataAge != null
+      ? dataAge <= 45
+        ? { text: `Live · ${dataTo!.slice(11)}`, title: `Meter data up to ${dataLabel} IST, ${ago(Math.max(1, dataAge))}.` }
+        : { text: `Data to ${dataLabel}`, title: `The plant's latest meter reading is from ${dataLabel} IST (${ago(dataAge)}). Its data logger may upload once a day; newer readings appear when it does.` }
+      : state === 'live'
+        ? { text: `Live · ${blockEnd(liveBlock)}`, title: `Current block B${liveBlock}, ending ${blockEnd(liveBlock)} IST. Data synced ${syncLag != null ? ago(syncLag) : ''}.` }
+        : { text: `Delayed · ${ago(syncLag!)}`, title: `The last sync from ergOS was ${ago(syncLag!)}. It normally runs every 15 minutes.` };
   return (
     <div className="eg-screen ecv-screen" data-page={page}>
       <aside className="eg-side ecv-side">
@@ -76,7 +89,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
         <header className="eg-topbar ecv-topbar">
           <h1 className="ecv-title">{TITLES[page]}</h1>
           <div className="eg-topbar__end">
-            <span className={`ecv-badge ecv-badge--${state}`} role="status" aria-live="polite" title={badge.title}>
+            <span className={`ecv-badge ecv-badge--${badgeState}`} role="status" aria-live="polite" title={badge.title}>
               <span className="ecv-badge__dot" aria-hidden="true" />{badge.text}
             </span>
             <ThemeToggle moonSvg={iconSvg('moon', 18)} defaultMode={themeMode} />
