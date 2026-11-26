@@ -7,7 +7,9 @@ import { inr } from '@/lib/format';
 // Months: one column per month; click opens that month's breakdown. Days: one column per day of a month.
 
 export interface CostPart { key: string; label: string; slot: string; value: number; kwh: number }
-export interface CostColumn { id: string; label: string; title: string; parts: CostPart[]; rate: number | null; demandKwh: number; href?: string; empty?: boolean }
+export interface CostColumn { id: string; label: string; title: string; parts: CostPart[]; rate: number | null; demandKwh: number; href?: string; empty?: boolean;
+  /** shown in the tooltip and drawn faded: e.g. a day with incomplete meter data */
+  note?: string }
 
 const W = 1000, H = 320, L = 74, R = 60, T = 34, B = 40;
 const PW = W - L - R, PH = H - T - B;
@@ -81,7 +83,7 @@ export function CostColumns({ columns, selected, aria, lineLabel = 'Average ₹/
           let base = 0;
           const isSel = selected === col.id;
           return (
-            <g key={col.id} className={'ecv-bill__col' + (selected && !isSel ? ' is-dim' : '') + (hi === i ? ' is-hi' : '')}>
+            <g key={col.id} className={'ecv-bill__col' + (selected && !isSel ? ' is-dim' : '') + (hi === i ? ' is-hi' : '') + (col.note ? ' is-partial' : '')}>
               {isSel ? <rect x={X(i) - slot / 2 + 2} y={T - 6} width={slot - 4} height={PH + 6} rx={8} className="ecv-bill__sel" /> : null}
               {col.parts.map((p) => {
                 if (p.value <= 0) return null;
@@ -100,6 +102,7 @@ export function CostColumns({ columns, selected, aria, lineLabel = 'Average ₹/
         <div className={'ecv-sv__tip ecv-hist__tip' + (leftPct > 58 ? ' is-flip' : '')} role="status"
           style={leftPct > 58 ? { right: `${100 - leftPct + 2}%`, top: 6 } : { left: `${leftPct + 2}%`, top: 6 }}>
           <div className="ecv-sv__date">{c.title}</div>
+          {c.note ? <div className="ecv-hist__note">{c.note}</div> : null}
           {c.empty ? <div className="eg-muted ecv-hist__nodata">No meter data</div> : (
             <>
               <div className="ecv-sv__big"><span>₹{inr(Math.round(total(c)))}</span><small>{c.rate != null ? `₹${c.rate.toFixed(2)}/kWh` : ''}</small></div>

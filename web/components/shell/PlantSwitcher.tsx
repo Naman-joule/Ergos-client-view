@@ -87,7 +87,7 @@ export function PlantSwitcher({ plants, selectedId, icons }: { plants: PlantOpti
             <span className="eg-overline ecv-client-label">Plant{sorted.length > 1 ? ` · ${index + 1} of ${sorted.length}` : ''}</span>
             <span className="eg-account__name" title={current.name}>{current.name}</span>
             <span className="eg-account__meta ecv-plantsw__meta">
-              {current.capacity} · {current.voltage} · {current.location}{current.autoTrading ? <> · <span className="eg-dot eg-dot--live" /> Auto</> : null}
+              {current.capacity} · {current.voltage} · {current.location}{current.autoTrading ? <> · <span title="Auto trading: Joulewise places this plant’s IEX bids every day"><span className="eg-dot eg-dot--live" /> Auto trading</span></> : null}
             </span>
           </span>
           <span className="ecv-chev" aria-hidden="true" dangerouslySetInnerHTML={{ __html: icons.chevron }} />

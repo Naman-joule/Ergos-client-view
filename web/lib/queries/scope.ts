@@ -7,7 +7,11 @@ export interface PlantRow {
   connected_load: number | null; voltage_level: string | null; is_auto_trading_enabled: boolean | null;
 }
 export interface Scope { clients: ClientRow[]; plants: PlantRow[] }
-export interface Selection { client: ClientRow; plant: PlantRow; plants: PlantRow[] }
+export interface Selection {
+  client: ClientRow; plant: PlantRow; plants: PlantRow[];
+  /** a plant or client was asked for in the URL that this user can't see; the selection fell back */
+  denied?: boolean;
+}
 
 /** Clients and consumer plants this user can see. No user filter here: RLS does it.
  *  Plants without a client are skipped (nothing to group them under). */
@@ -32,23 +36,32 @@ const toId = (v: unknown) => {
 };
 
 /**
- * Picks the client and plant to show. A plant or client id from the query string that isn't
- * visible silently falls back to the first visible one, without hinting that it exists.
+ * The client and plant to show: the URL's, else the one remembered from the last page (cookie, see
+ * middleware.ts), else the first. A URL asking for a plant or client the user can't see falls back and
+ * says so (denied), instead of silently showing another plant.
  */
-export function resolveSelection(scope: Scope, params: { client?: unknown; plant?: unknown }): Selection | null {
+export function resolveSelection(scope: Scope, params: { client?: unknown; plant?: unknown },
+  remembered?: { client?: unknown; plant?: unknown }): Selection | null {
   if (!scope.plants.length) return null;
-  const pid = toId(params.plant);
-  const cid = toId(params.client);
-  let plant = pid ? scope.plants.find((p) => p.plant_id === pid) : undefined;
-  let client = plant ? scope.clients.find((c) => c.client_id === plant!.client_id) : undefined;
-  if (!plant && cid) {
-    client = scope.clients.find((c) => c.client_id === cid);
-    plant = client ? scope.plants.find((p) => p.client_id === client!.client_id) : undefined;
+  const asked = toId(params.plant) || toId(params.client);
+  const pick = (pr: { client?: unknown; plant?: unknown }) => {
+    const pid = toId(pr.plant), cid = toId(pr.client);
+    let plant = pid ? scope.plants.find((p) => p.plant_id === pid) : undefined;
+    let client = plant ? scope.clients.find((c) => c.client_id === plant!.client_id) : undefined;
+    if (!plant && cid) {
+      client = scope.clients.find((c) => c.client_id === cid);
+      plant = client ? scope.plants.find((p) => p.client_id === client!.client_id) : undefined;
+    }
+    return plant && client ? { plant, client } : null;
+  };
+  let hit = pick(params);
+  const denied = !!asked && !hit;
+  if (!hit && !asked && remembered) hit = pick(remembered);
+  if (!hit) {
+    const client = scope.clients[0];
+    const plant = client ? scope.plants.find((p) => p.client_id === client.client_id) : undefined;
+    hit = plant && client ? { plant, client } : null;
   }
-  if (!plant || !client) {
-    client = scope.clients[0];
-    plant = scope.plants.find((p) => p.client_id === client!.client_id);
-  }
-  if (!plant || !client) return null;
-  return { client, plant, plants: scope.plants.filter((p) => p.client_id === client!.client_id) };
+  if (!hit) return null;
+  return { ...hit, plants: scope.plants.filter((p) => p.client_id === hit!.client.client_id), denied };
 }

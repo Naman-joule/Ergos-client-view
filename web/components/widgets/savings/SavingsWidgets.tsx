@@ -18,7 +18,6 @@ import { Heatmap } from '../../charts/Heatmap';
 
 interface Ctx { data: SavingsData; plant: PlantRow; period: Period }
 
-const rate4 = (v: number | null) => (v === null ? '—' : `₹${v.toFixed(4)} / kWh`);
 
 function NoRows({ title, ctx }: { title: string; ctx: Ctx }) {
   return (
@@ -35,9 +34,9 @@ function SavingsFolder({ data, plant, period, title }: Ctx & { title?: string })
   const below = t.percentBelow;
   return (
     <Folder sheets={<>
-      <Sheet kicker="Volume">Cleared<b>{inr(t.volumeKwh)} kWh</b><div className="ecv-sheet-gap">Trade days</div><b>{t.tradeDays}</b></Sheet>
-      <Sheet kicker="Benchmark">DISCOM, ToD weighted<b>{rate4(t.benchmarkRate)}</b><div className="ecv-sheet-gap">Basis</div><b>Grid tariff</b></Sheet>
-      <Sheet kicker="IEX landed">Average<b>{rate4(t.landedRate)}</b><div className="ecv-sheet-gap">Includes</div><b>STU, CTU, CSS, ED, losses</b></Sheet>
+      {/* sheets peek out behind the folder and overlap each other, which cut their text off; one sheet with one
+          short figure reads cleanly (the rates are on the folder's bottom row, the details in the tiles) */}
+      <Sheet kicker="Volume bought"><b>{compact(t.volumeKwh)} kWh</b></Sheet>
     </>}>
       <div className="eg-folder__head">
         <h2 className="eg-folder__title">{title ?? 'Savings'}</h2>
@@ -72,11 +71,11 @@ function SavingsTiles({ data, period, tiles }: Ctx & { tiles: readonly string[] 
   const render = (k: string) => {
     switch (k) {
       case 'volume': return <StatTile key={k} series="iex" label="Volume cleared" icon="bolt" date={range} value={inr(t.volumeKwh)} unit="kWh"
-        foot={`${t.tradeDays} trade day${t.tradeDays === 1 ? '' : 's'}`} footChip={<Chip>{inr(t.volumeKwh / 1000, 2)} MWh</Chip>} />;
+        foot={`${t.tradeDays} trade day${t.tradeDays === 1 ? '' : 's'}`} />;
       case 'landed': return <StatTile key={k} series="gov" label="Avg landed tariff" icon="trend" date="Weighted by volume"
-        value={t.landedRate !== null ? `₹${t.landedRate.toFixed(4)}` : '—'} unit="/ kWh" foot="Includes STU, CTU, CSS, ED and losses" />;
+        value={t.landedRate !== null ? `₹${t.landedRate.toFixed(2)}` : '—'} unit="/ kWh" foot="Includes STU, CTU, CSS, ED and losses" />;
       case 'benchmark': return <StatTile key={k} series="grid" label="Grid benchmark" icon="shield" date="DISCOM"
-        value={t.benchmarkRate !== null ? `₹${t.benchmarkRate.toFixed(4)}` : '—'} unit="/ kWh" foot={t.estimatedDays + t.impliedDays ? `ToD weighted · ${t.estimatedDays + t.impliedDays} day${t.estimatedDays + t.impliedDays === 1 ? "" : "s"} ≈` : "ToD weighted baseline"} />;
+        value={t.benchmarkRate !== null ? `₹${t.benchmarkRate.toFixed(2)}` : '—'} unit="/ kWh" foot={t.estimatedDays + t.impliedDays ? `ToD weighted · ${t.estimatedDays + t.impliedDays} day${t.estimatedDays + t.impliedDays === 1 ? "" : "s"} ≈` : "ToD weighted baseline"} />;
       case 'savings': return <StatTile key={k} series="iex" label="Net savings" icon="rupee" date={range}
         value={rupees(t.savings)} foot={t.best ? `Best day ${formatDayMonth(t.best.trade_date)}` : '—'} />;
       case 'percent_below': return <StatTile key={k} series="solar" label="Below benchmark" icon="arrow-up" date={range}
@@ -333,12 +332,16 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
                 <tr key={r.trade_date}>
                   <td className="nowrap">{formatDate(r.trade_date)}{r.is_locked ? null : <> <Chip tone="warning">Provisional</Chip></>}</td>
                   <td className="num">{inr(r.volume_cleared_kwh)}</td>
-                  <td className="num">{r.avg_landed_iex_tariff !== null ? r.avg_landed_iex_tariff.toFixed(4) : '—'}</td>
+                  <td className="num">{r.avg_landed_iex_tariff !== null ? r.avg_landed_iex_tariff.toFixed(2) : '—'}</td>
                   <td className="num">{inr(r.iex_total_cost, 2)}</td>
                   <td className="num" title={r.benchmark_source === 'implied' ? 'Provisional: worked back from the day’s savings while its grid cost is being finalised' : r.benchmark_estimated ? 'Provisional: estimated from the DISCOM ToD tariff until the day’s statement is final' : undefined}>
-                    {r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{r.avg_grid_tariff !== null ? r.avg_grid_tariff.toFixed(4) : '—'}</td>
+                    {r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{r.avg_grid_tariff !== null ? r.avg_grid_tariff.toFixed(2) : '—'}</td>
                   <td className="num">{r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{inr(r.grid_total_cost, 2)}</td>
-                  <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}>{r.benchmark_estimated && r.benchmark_source !== 'implied' ? <span className="ecv-est">≈</span> : null}{inr(r.net_savings_per_day, 2)}</td>
+                  <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}
+                    title={r.net_savings_per_day < 0 && r.avg_landed_iex_tariff != null && r.avg_grid_tariff != null
+                      ? `IEX cost ₹${r.avg_landed_iex_tariff.toFixed(2)}/kWh was above the DISCOM rate ₹${r.avg_grid_tariff.toFixed(2)}/kWh this day (high exchange prices), so buying from IEX cost more than the grid would have.` : undefined}>
+                    {r.benchmark_estimated && r.benchmark_source !== 'implied' ? <span className="ecv-est">≈</span> : null}{inr(r.net_savings_per_day, 2)}
+                    {r.net_savings_per_day < 0 ? <small className="ecv-sub">IEX above DISCOM rate</small> : null}</td>
                   <td className="num">{r.percent_below_grid !== null ? `${r.percent_below_grid.toFixed(2)}%` : '—'}</td>
                   <td className="ecv-sticky-end"><DayPdf row={r} plantId={plant.plant_id} /></td>
                 </tr>
@@ -349,9 +352,9 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
             <tr>
               <td>Total · {t.tradeDays} days</td>
               <td className="num">{inr(t.volumeKwh)}</td>
-              <td className="num">{t.landedRate !== null ? t.landedRate.toFixed(4) : '—'}</td>
+              <td className="num">{t.landedRate !== null ? t.landedRate.toFixed(2) : '—'}</td>
               <td className="num">{inr(t.iexCost, 2)}</td>
-              <td className="num">{t.benchmarkRate !== null ? t.benchmarkRate.toFixed(4) : '—'}</td>
+              <td className="num">{t.benchmarkRate !== null ? t.benchmarkRate.toFixed(2) : '—'}</td>
               <td className="num">{inr(t.gridCost, 2)}</td>
               <td className={'num' + (t.savings < 0 ? ' neg' : '')}>{inr(t.savings, 2)}</td>
               <td className="num">{t.percentBelow !== null ? `${(t.percentBelow * 100).toFixed(2)}%` : '—'}</td>

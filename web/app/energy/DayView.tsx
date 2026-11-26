@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { rememberedScope } from '@/lib/remembered';
 import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { latestMeterDate, loadToday } from '@/lib/queries/today';
@@ -25,7 +26,7 @@ export async function DayView({ sp }: { sp: SP }) {
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
-    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
+    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant }, await rememberedScope());
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     // Without a date in the URL, open on today, or on the plant's latest day with readings if today has none yet.
@@ -58,7 +59,7 @@ export async function DayView({ sp }: { sp: SP }) {
     <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} live={date === today} dataTo={view.dataTo}>
       {loaded.error && user.permissions.has('manage_dashboards') ? <Notice>{loaded.error}</Notice> : null}
       {fellBack ? <Notice>No readings for today yet for {sel.plant.name}. Showing the latest day with data, {formatDateLong(date)}.</Notice> : null}
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
         clientHref={(c) => href('/energy', { client: c.client_id, date: explicit && explicit !== today ? explicit : null })}
         plantHref={(p) => link({ plant: p.plant_id })}
         controls={<>

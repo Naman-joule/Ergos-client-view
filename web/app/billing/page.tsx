@@ -1,12 +1,13 @@
 import type React from 'react';
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { rememberedScope } from '@/lib/remembered';
 import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { BILLING_MONTH_CHOICES, loadBilling, resolveBillingMonths, type BillMonth } from '@/lib/queries/billing';
 import { loadSpec } from '@/lib/dashboard/load';
-import { currentBlock, formatDate, formatRange } from '@/lib/time';
+import { istToday, currentBlock, formatDate, formatRange } from '@/lib/time';
 import { inr, mwhValue, rupees } from '@/lib/format';
 import { href, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
@@ -35,7 +36,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
-    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
+    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant }, await rememberedScope());
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     const [loaded, data] = await Promise.all([loadSpec(q, sel.client.client_id), loadBilling(q, sel.plant.plant_id, months)]);
@@ -57,6 +58,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
   // selected month: ?month=YYYY-MM, else the newest month with data
   const withData = data.months.filter((m) => m.daysWithData > 0);
+  // months before the plant's first metered month are just empty columns: leave them out
+  const firstMonth = withData.length ? withData[withData.length - 1]!.month : null;
+  const shownMonths = firstMonth ? data.months.filter((m) => m.month >= firstMonth) : data.months;
+  const trimmed = data.months.length - shownMonths.length;
   const sel_m = withData.find((m) => m.month === sp.month) ?? withData[0] ?? null;
   const monthHref = (month: string) => href('/billing', { client: sel.client.client_id, plant: sel.plant.plant_id, months, month }) + '#bill-month';
   const parts = (iex: number, iexKwh: number, grid: number, gridKwh: number, solar: number, solarKwh: number) => [
@@ -64,15 +69,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     { key: 'grid', label: 'Grid', slot: 'grid', value: grid, kwh: gridKwh },
     { key: 'solar', label: 'Solar', slot: 'solar', value: solar, kwh: solarKwh },
   ];
-  const monthCols: CostColumn[] = [...data.months].reverse().map((m) => ({
+  const monthCols: CostColumn[] = [...shownMonths].reverse().map((m) => ({
     id: m.month, label: monthLabel(m.month).replace(/ (\d{2})(\d{2})$/, " '$2"), title: `${monthLabel(m.month)}${m.partial ? ` · ${m.daysWithData} days so far` : ''}`,
     parts: parts(m.exchangeCostRs, m.exchangeKwh, m.gridCostRs, m.gridKwh, m.solarCostRs, m.solarKwh),
     rate: m.avgRate, demandKwh: m.demandKwh, href: m.daysWithData ? monthHref(m.month) : undefined, empty: !m.daysWithData,
   }));
+  const today = istToday();
   const dayCols: CostColumn[] = sel_m ? data.days.filter((d) => d.date.startsWith(sel_m.month)).map((d) => ({
     id: d.date, label: String(Number(d.date.slice(8))), title: formatDate(d.date),
     parts: parts(d.exchangeCostRs, d.bill.exchangeKwh, d.gridCostRs, d.bill.gridKwh, d.solarCostRs, d.bill.solarKwh),
     rate: d.demandKwh ? d.totalCostRs / d.demandKwh : null, demandKwh: d.demandKwh, empty: !d.blocks,
+    // a past day with under 90% of its 96 blocks metered: its bill is low because readings are missing
+    note: d.blocks > 0 && d.blocks < 87 && d.date < today ? `Meter data incomplete: ${d.blocks} of 96 blocks` : undefined,
   })) : [];
 
   const internal = isInternal(user);
@@ -88,7 +96,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </details>
       {internal && t.fallbackDays > 0 ? <Notice>ergOS has no tariff rows for {sel.plant.name} on {t.fallbackDays} day{t.fallbackDays === 1 ? '' : 's'}; those are priced with the regulatory ToD schedule instead.</Notice> : null}
       {unpriced > 0.5 ? <Notice>{inr(unpriced)} kWh from the grid fall in blocks with no DISCOM ToD rate, so they aren’t costed. The grid cost for those months is understated.</Notice> : null}
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
         clientHref={(c) => href('/billing', { client: c.client_id, months })}
         plantHref={(p) => href('/billing', { client: sel.client.client_id, plant: p.plant_id, months })}
         controls={
@@ -164,24 +172,23 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               <table className="ecv-table">
                 <thead>
                   <tr>
-                    <th>Month</th><th className="num">Demand MWh</th><th className="num">Exchange MWh</th><th className="num">Solar MWh</th>
-                    <th className="num">Banking MWh</th><th className="num">Grid MWh</th><th className="num">IEX cost</th><th className="num">Grid cost</th>
+                    <th>Month</th><th className="num">Demand MWh</th><th className="num">Grid cost</th><th className="num">IEX cost</th>
                     <th className="num">Solar cost</th><th className="num ecv-sticky-end">Total · ₹/kWh</th>
                   </tr>
                 </thead>
-                <tbody>{data.months.map((m) => <MonthRow key={m.month} m={m} />)}</tbody>
+                <tbody>{shownMonths.map((m) => <MonthRow key={m.month} m={m} />)}</tbody>
                 <tfoot>
                   <tr>
-                    <td>Total · {t.months} month{t.months === 1 ? '' : 's'}</td>
-                    <td className="num">{mwhValue(t.demandKwh)}</td><td className="num">{mwhValue(t.exchangeKwh)}</td><td className="num">{mwhValue(t.solarKwh)}</td>
-                    <td className="num">{mwhValue(t.bankKwh)}</td><td className="num">{mwhValue(t.gridKwh)}</td>
-                    <td className="num">{rupees(t.exchangeCostRs)}</td><td className="num">{rupees(t.gridCostRs)}</td><td className="num">{rupees(t.solarCostRs)}</td>
+                    <td>Total · {shownMonths.length} month{shownMonths.length === 1 ? '' : 's'}</td>
+                    <td className="num">{mwhValue(t.demandKwh)}</td>
+                    <td className="num">{rupees(t.gridCostRs)}</td><td className="num">{rupees(t.exchangeCostRs)}</td><td className="num">{rupees(t.solarCostRs)}</td>
                     <td className="num ecv-sticky-end">{rupees(t.totalCostRs)}<small className="ecv-sub">{r4(t.avgRate)}/kWh</small></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-            <p className="eg-card__sub ecv-footnote">Energy cost from your meter readings. Fixed and demand charges aren’t included. Your DISCOM and IEX invoices remain the official bills.</p>
+            <p className="eg-card__sub ecv-footnote">Energy cost from your meter readings. Fixed and demand charges aren’t included. Your DISCOM and IEX invoices remain the official bills.
+              {trimmed > 0 && firstMonth ? <> Starts at {monthLabel(firstMonth)}, the first month with meter data.</> : null} Energy by source, banking and every day are in the Excel download.</p>
           </Card>
         </WidgetCell>
       </WidgetGrid>
@@ -191,14 +198,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
 function MonthRow({ m }: { m: BillMonth }) {
   if (!m.daysWithData) {
-    return <tr className="ecv-row--empty"><td className="nowrap">{monthLabel(m.month)}</td><td colSpan={9} className="eg-muted">No meter data</td><td className="ecv-sticky-end" /></tr>;
+    return <tr className="ecv-row--empty"><td className="nowrap">{monthLabel(m.month)}</td><td colSpan={4} className="eg-muted">No meter data</td><td className="ecv-sticky-end" /></tr>;
   }
   return (
     <tr>
       <td className="nowrap">{monthLabel(m.month)}{m.partial ? <> <Chip tone="accent">{m.daysWithData} days</Chip></> : null}</td>
-      <td className="num">{mwhValue(m.demandKwh)}</td><td className="num">{mwhValue(m.exchangeKwh)}</td><td className="num">{mwhValue(m.solarKwh)}</td>
-      <td className="num">{mwhValue(m.bankKwh)}</td><td className="num">{mwhValue(m.gridKwh)}</td>
-      <td className="num">{rupees(m.exchangeCostRs)}</td><td className="num">{rupees(m.gridCostRs)}</td><td className="num">{rupees(m.solarCostRs)}</td>
+      <td className="num">{mwhValue(m.demandKwh)}</td>
+      <td className="num">{rupees(m.gridCostRs)}<small className="ecv-sub">{mwhValue(m.gridKwh)} MWh</small></td>
+      <td className="num">{rupees(m.exchangeCostRs)}<small className="ecv-sub">{mwhValue(m.exchangeKwh)} MWh</small></td>
+      <td className="num">{rupees(m.solarCostRs)}<small className="ecv-sub">{mwhValue(m.solarKwh)} MWh</small></td>
       <td className="num ecv-sticky-end"><b>{rupees(m.totalCostRs)}</b><small className="ecv-sub">{r4(m.avgRate)}/kWh</small></td>
     </tr>
   );

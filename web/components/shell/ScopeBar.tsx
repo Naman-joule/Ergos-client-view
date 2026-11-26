@@ -22,12 +22,14 @@ function clientMeta(plants: PlantRow[]): string {
  * The page's scope: which client (switcher) and which plant (grid), plus page controls on the right
  * (day pager on Today, period on Savings).
  */
-export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls, below, sticky }: {
+export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls, below, sticky, denied }: {
   scope: Scope; client: ClientRow; plant: PlantRow;
   clientHref: (c: ClientRow) => string; plantHref: (p: PlantRow) => string;
   controls?: ReactNode; below?: ReactNode;
   /** what follows the user down the page; default: the controls, else what's below */
   sticky?: ReactNode;
+  /** the URL asked for a plant or client this user can't see; say so instead of silently switching */
+  denied?: boolean;
 }) {
   const byClient = (id: number) => scope.plants.filter((p) => p.client_id === id);
   const clients: ClientOption[] = scope.clients.map((c) => ({
@@ -47,6 +49,7 @@ export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls
   const icon = (n: string, s = 14) => iconSvg(n, s);
   return (
     <>
+      {denied ? <div className="ecv-notice ecv-notice--warning" role="status">The link was for a plant your account can’t see. Showing {plant.name} instead.</div> : null}
       <section className="eg-glass ecv-scope" aria-label="Client and plant">
         <div className="ecv-scope__top">
           <div className="ecv-scope__pick">

@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { rememberedScope } from '@/lib/remembered';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { obligationMonths, obligationReports, type ObligationRow } from '@/lib/queries/obligation';
@@ -31,7 +32,7 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
-    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
+    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant }, await rememberedScope());
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     // Before migration 009 runs, the table doesn't exist: say so instead of failing the page.
@@ -93,7 +94,7 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
   return (
     <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
       {isAdmin && !obligationFtpConfigured() ? <Notice>Uploads and downloads are switched off: set OBLIGATION_FTP_URL on the server (a write account for the obligation folder only).</Notice> : null}
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
         clientHref={(c) => href('/market/reports', { client: c.client_id })}
         plantHref={(p) => href('/market/reports', { client: sel.client.client_id, plant: p.plant_id })}
         below={monthStrip} sticky={monthStrip} />
@@ -111,7 +112,7 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
             : `${sel.plant.name} · IEX Daily Obligation Reports by delivery date`}>
           {!rows.length ? (
             <Empty title={`No obligation reports for ${monthLabel(month)}`} icon="file">
-              {isAdmin ? 'Upload the PDFs from IEX above.' : 'Your Joulewise team uploads these as they arrive from IEX.'}
+              {isAdmin ? 'Upload the PDFs from IEX above.' : months.length ? 'Your Joulewise team uploads these as they arrive from IEX.' : `IEX issues an obligation report for each trading day. None have been added for ${sel.plant.name} yet; your Joulewise team uploads them as they arrive.`}
             </Empty>
           ) : (
             <div className="ecv-table-wrap">

@@ -1628,10 +1628,9 @@
 }
 .ecv-bill__row {
   display: grid;
-  grid-template-columns: minmax(
-      150px,
-      1.1fr
-    ) 110px 22px 120px 22px 130px minmax(200px, 2fr);
+  grid-template-columns:
+    minmax(150px, 1.1fr)
+    110px 22px 120px 22px 130px minmax(200px, 2fr);
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
@@ -1748,10 +1747,9 @@
 }
 .ecv-bill__todrow {
   display: grid;
-  grid-template-columns: minmax(
-      150px,
-      1.1fr
-    ) 110px 22px 120px 22px 130px minmax(120px, 1fr) minmax(180px, 1fr);
+  grid-template-columns:
+    minmax(150px, 1.1fr)
+    110px 22px 120px 22px 130px minmax(120px, 1fr) minmax(180px, 1fr);
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
@@ -1802,10 +1800,9 @@
 .ecv-seg__head,
 .ecv-seg__row {
   display: grid;
-  grid-template-columns: minmax(
-      170px,
-      1.3fr
-    ) 100px 150px 150px 120px 140px minmax(120px, 1fr);
+  grid-template-columns:
+    minmax(170px, 1.3fr)
+    100px 150px 150px 120px 140px minmax(120px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 8px 12px;
@@ -3273,4 +3270,26 @@ body {
 .ecv-howcalc p {
   margin: 8px 0 0;
   line-height: 1.55;
+}
+
+/* Savings chart: the runtime prints the daily average twice (a tag at the left edge, clipped behind the
+   y-axis, and a label at the right); keep the right one only */
+.ecv-sv .eg-axis--tag {
+  display: none;
+}
+
+/* Savings hero: the folder's tab curve covers the bottom-left of the sheet; keep its figure clear of it */
+.eg-sheet > b {
+  display: block;
+  text-align: right;
+}
+
+/* Billing day chart: a day with incomplete meter data is drawn faded, with a note in its tooltip */
+.ecv-bill__col.is-partial .ecv-hist__area {
+  opacity: 0.4;
+}
+.ecv-hist__note {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--warning, #d9a03f);
 }

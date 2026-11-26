@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { rememberedScope } from '@/lib/remembered';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
 import { latestMeterDate } from '@/lib/queries/today';
@@ -45,7 +46,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
-    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
+    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant }, await rememberedScope());
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     // No date asked: the latest day with readings (a logger that uploads daily has nothing for today yet)
@@ -140,7 +141,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
   if (monthMode && monthData) {
     return (
       <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark" dataTo={last}>
-        <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+        <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
           clientHref={(c) => href('/reports/plant-load', { client: c.client_id, view: 'month', month })}
           plantHref={(p) => monthLink({ plant: p.plant_id })} controls={controls} />
         <div className="ecv-stack">
@@ -159,7 +160,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
 
   return (
     <Shell user={user} page="load" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark" dataTo={last}>
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
         clientHref={(c) => href('/reports/plant-load', { client: c.client_id })}
         plantHref={(p) => link({ plant: p.plant_id })}
         controls={controls} />

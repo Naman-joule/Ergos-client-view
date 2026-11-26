@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { rememberedScope } from '@/lib/remembered';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { latestStatementDate, loadSavings, periodEndingAt, resolvePeriod } from '@/lib/queries/savings';
 import { syncLagMinutes } from '@/lib/queries/sync';
@@ -26,7 +27,7 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
 
   const view = await withUser(user.id, async (q) => {
     const scope = await loadScope(q);
-    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant });
+    const sel = resolveSelection(scope, { client: sp.client, plant: sp.plant }, await rememberedScope());
     const lag = await syncLagMinutes(q);
     if (!sel) return { scope, sel: null, lag } as const;
     const loaded = await loadSpec(q, sel.client.client_id);
@@ -82,7 +83,7 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
         <p className="ecv-clientnote">Figures marked ≈ ({data.totals.impliedDays + data.totals.estimatedDays} day{data.totals.impliedDays + data.totals.estimatedDays === 1 ? '' : 's'}) are provisional and will update once the day’s statement is final.</p>
       ) : null}
       {!data.rows.length && !latest ? <Notice>No daily savings statements for {sel.plant.name} yet. They appear once they’re final, usually the day after trading.</Notice> : null}
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant} denied={sel.denied}
         clientHref={(c) => href('/savings', { client: c.client_id, ...keepRange })}
         plantHref={(p) => link(p.plant_id)}
         controls={
