@@ -12,6 +12,7 @@ import { ScopeBar } from '@/components/shell/ScopeBar';
 import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { SavingsWidgetView } from '@/components/widgets/savings/SavingsWidgets';
 import { Empty, Notice } from '@/components/ui/Empty';
+import { isInternal } from '@/lib/audience';
 import { Icon } from '@/components/ui/Icon';
 
 export const dynamic = 'force-dynamic';
@@ -57,6 +58,7 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
   const widgets = visibleSavings(loaded.spec, user.permissions);
   // Switching plant or client keeps only a range the user picked, so each plant opens on its own latest data.
   const keepRange: Record<string, string> = asked.preset ? { preset: asked.preset } : asked.explicit ? { from: asked.from, to: asked.to } : {};
+  const internal = isInternal(user);
   const link = (plant: number) => href('/savings', { client: sel.client.client_id, plant, ...keepRange });
 
   return (
@@ -66,16 +68,20 @@ export default async function SavingsPage({ searchParams }: { searchParams: Prom
       {!data.rows.length && latest && !fellBack ? (
         <Notice>No statements for {sel.plant.name} between {formatRange(period.from, period.to)}. Its latest statement is for {formatDate(latest)}. <a className="ecv-link" href={href('/savings', { client: sel.client.client_id, plant: sel.plant.plant_id, from: periodEndingAt(latest).from, to: latest })}>Show that month</a></Notice>
       ) : null}
-      {data.totals.impliedDays > 0 ? (
+      {/* data-quality detail for Joulewise staff; clients get one plain line */}
+      {internal && data.totals.impliedDays > 0 ? (
         <Notice>ergOS stores no grid cost for {data.totals.impliedDays} day{data.totals.impliedDays === 1 ? '' : 's'} in this period. Savings are ergOS’s own figures;
           the grid cost and benchmark for {data.totals.impliedDays === 1 ? 'that day' : 'those days'} are worked back from them (IEX cost + savings) and marked ≈.</Notice>
       ) : null}
-      {data.totals.estimatedDays > 0 ? (
+      {internal && data.totals.estimatedDays > 0 ? (
         <Notice>ergOS has no savings figure for {data.totals.estimatedDays} day{data.totals.estimatedDays === 1 ? '' : 's'} in this period.
           For {data.totals.estimatedDays === 1 ? 'it' : 'those days'}, the benchmark, grid cost and savings are estimated from the plant’s DISCOM ToD tariff
           (its voltage level plus FPPCA, per cleared 15-minute block) and marked ≈. They will be replaced by ergOS’s figures once ergOS prices {data.totals.estimatedDays === 1 ? 'that day' : 'those days'}.</Notice>
       ) : null}
-      {!data.rows.length && !latest ? <Notice>No daily savings statements have been synced for {sel.plant.name} yet. They appear once ergOS locks them, usually the day after trading.</Notice> : null}
+      {!internal && data.totals.impliedDays + data.totals.estimatedDays > 0 ? (
+        <p className="ecv-clientnote">Figures marked ≈ ({data.totals.impliedDays + data.totals.estimatedDays} day{data.totals.impliedDays + data.totals.estimatedDays === 1 ? '' : 's'}) are provisional and will update once the day’s statement is final.</p>
+      ) : null}
+      {!data.rows.length && !latest ? <Notice>No daily savings statements for {sel.plant.name} yet. They appear once they’re final, usually the day after trading.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/savings', { client: c.client_id, ...keepRange })}
         plantHref={(p) => link(p.plant_id)}

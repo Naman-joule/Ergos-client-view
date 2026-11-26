@@ -1,6 +1,7 @@
 import type React from 'react';
 import { requireUser } from '@/lib/auth';
 import { withUser } from '@/lib/db';
+import { isInternal } from '@/lib/audience';
 import { lastReading } from '@/lib/queries/plant-load';
 import { loadScope, resolveSelection } from '@/lib/queries/scope';
 import { syncLagMinutes } from '@/lib/queries/sync';
@@ -57,7 +58,7 @@ export async function RangeView({ sp }: { sp: SP }) {
   return (
     <Shell user={user} page="energy" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} dataTo={view.dataTo}>
       {period.clamped ? <Notice>Ranges are limited to {HISTORY_MAX_DAYS} days. Showing {range}.</Notice> : null}
-      {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} between {range}. Pick another range, or check that the sync is running.</Notice> : null}
+      {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} between {range}. Pick another range{isInternal(user) ? ', or check that the sync is running' : ''}.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/energy', { client: c.client_id, ...keep })}
         plantHref={(p) => href('/energy', { client: sel.client.client_id, plant: p.plant_id, ...keep })}

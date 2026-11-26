@@ -9,6 +9,7 @@ import { iconSvg } from '@/lib/ui/icon-svg';
 import { blockEnd } from '@/lib/time';
 import type { SessionUser } from '@/lib/auth';
 import { ago, timeState } from '@/lib/time-state';
+import { isInternal } from '@/lib/audience';
 
 export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports' | 'load' | 'account';
 const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'IEX obligation reports', load: 'Plant load report', account: 'Your account' };
@@ -33,6 +34,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
   dataTo?: string | null; live?: boolean; children: ReactNode;
 }) {
   const state = timeState(syncLag);
+  const internal = isInternal(user);
   const role = user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Manager' : 'Client';
   const items: { page: Page; href: string; icon: Parameters<typeof Icon>[0]['name']; label: string; show: boolean }[] = [
     { page: 'energy', href: '/energy', icon: 'bolt', label: 'Energy', show: user.permissions.has('view_today') },
@@ -53,14 +55,14 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
   const dataLabel = dataTo ? `${Number(dataTo.slice(8, 10))} ${MON[Number(dataTo.slice(5, 7)) - 1]}, ${dataTo.slice(11)}` : '';
   const badgeState = state === 'stale' || dataAge == null ? state : dataAge <= 45 ? 'live' : 'delayed';
   const badge = state === 'stale'
-    ? { text: syncLag === null ? 'Not synced' : `Stale · ${ago(syncLag)}`, title: 'Data has not been synced from ergOS for over 90 minutes.' }
+    ? { text: syncLag === null ? 'Not synced' : `Stale · ${ago(syncLag)}`, title: internal ? 'Data has not been synced from ergOS for over 90 minutes.' : 'Data hasn’t updated for over 90 minutes.' }
     : dataAge != null
       ? dataAge <= 45
         ? { text: `Live · ${dataTo!.slice(11)}`, title: `Meter data up to ${dataLabel} IST, ${ago(Math.max(1, dataAge))}.` }
         : { text: `Data to ${dataLabel}`, title: `The plant's latest meter reading is from ${dataLabel} IST (${ago(dataAge)}). Its data logger may upload once a day; newer readings appear when it does.` }
       : state === 'live'
         ? { text: `Live · ${blockEnd(liveBlock)}`, title: `Current block B${liveBlock}, ending ${blockEnd(liveBlock)} IST. Data synced ${syncLag != null ? ago(syncLag) : ''}.` }
-        : { text: `Delayed · ${ago(syncLag!)}`, title: `The last sync from ergOS was ${ago(syncLag!)}. It normally runs every 15 minutes.` };
+        : { text: `Delayed · ${ago(syncLag!)}`, title: internal ? `The last sync from ergOS was ${ago(syncLag!)}. It normally runs every 15 minutes.` : `Last updated ${ago(syncLag!)}. Data normally updates every 15 minutes.` };
   return (
     <div className="eg-screen ecv-screen" data-page={page}>
       <aside className="eg-side ecv-side">
@@ -109,7 +111,7 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
         <div className={`ecv-slot${state === 'stale' ? ' is-open' : ''}`} aria-hidden={state !== 'stale'}>
           {state === 'stale' ? (
             <div className="ecv-notice ecv-notice--warning ecv-slot__inner">
-              {syncLag === null ? 'Nothing has been synced from ergOS yet.' : `Data is stale: the last sync from ergOS was ${ago(syncLag)}.`} Figures stop at the last synced block.
+              {internal ? (syncLag === null ? 'Nothing has been synced from ergOS yet.' : `Data is stale: the last sync from ergOS was ${ago(syncLag)}.`) : (syncLag === null ? 'No data has arrived yet.' : `Data hasn’t updated for ${ago(syncLag).replace(' ago', '')}. We’re on it.`)}{internal ? ' Figures stop at the last synced block.' : ' Figures show everything received so far.'}
             </div>
           ) : null}
         </div>

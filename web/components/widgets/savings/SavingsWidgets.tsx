@@ -23,7 +23,7 @@ const rate4 = (v: number | null) => (v === null ? '—' : `₹${v.toFixed(4)} / 
 function NoRows({ title, ctx }: { title: string; ctx: Ctx }) {
   return (
     <Card title={title} sub={`${ctx.plant.name} · ${formatRange(ctx.period.from, ctx.period.to)}`}>
-      <Empty title="No savings statements in this period" icon="receipt">Daily statements appear here once ergOS locks them, usually the day after trading.</Empty>
+      <Empty title="No savings statements in this period" icon="receipt">Daily statements appear here once they’re final, usually the day after trading.</Empty>
     </Card>
   );
 }
@@ -159,7 +159,7 @@ function SavingsCharges({ data, plant, period, title }: Ctx & { title?: string }
         <div className="ecv-costs__rows">
           <CostRow series="iex" name="Exchange energy" value={t.energy} whole={whole}
             note={t.energyDerivedDays > 0
-              ? `The power itself, at the exchange clearing price. ergOS didn’t itemise it on ${t.energyDerivedDays} day${t.energyDerivedDays === 1 ? '' : 's'}; there it’s the landed cost less the charges below.`
+              ? `The power itself, at the exchange clearing price. The statement didn’t itemise it on ${t.energyDerivedDays} day${t.energyDerivedDays === 1 ? '' : 's'}; there it’s the landed cost less the charges below.`
               : 'The power itself, at the exchange clearing price'} />
           {CHARGE_GROUPS.map((g, i) => {
             const items = g.items.map((k) => ({ label: CHARGE_LABEL[k]!, v: t.charges[k] }));
@@ -169,14 +169,14 @@ function SavingsCharges({ data, plant, period, title }: Ctx & { title?: string }
               note={items.length > 1 ? `${g.hint}: ${items.filter((x) => x.v).map((x) => `${x.label} ${rupees(x.v)}`).join(' · ')}` : g.hint} />;
           })}
           {showUnaccounted
-            ? <p className="ecv-costs__note ecv-costs__note--warn">{rupees(Math.abs(t.unaccounted))} of the landed cost {t.unaccounted > 0 ? 'isn’t itemised in ergOS’s statements' : 'is itemised twice in ergOS’s statements'} (energy + charges {t.unaccounted > 0 ? 'fall short of' : 'exceed'} the landed cost).</p> : null}
+            ? <p className="ecv-costs__note ecv-costs__note--warn">{rupees(Math.abs(t.unaccounted))} of the landed cost {t.unaccounted > 0 ? 'isn’t itemised in the daily statements' : 'is itemised twice in the daily statements'} (energy + charges {t.unaccounted > 0 ? 'fall short of' : 'exceed'} the landed cost).</p> : null}
         </div>
       </section>
 
       <section className="ecv-costs ecv-costs--loss" aria-label="What was lost">
         <h4 className="ecv-costs__head"><span className="ecv-costs__kind ecv-costs__kind--loss">Lost · kWh</span>Energy lost on the way to the plant</h4>
         {L.days === 0 ? (
-          <p className="ecv-costs__note">ergOS’s statements for this period don’t record loss rates.</p>
+          <p className="ecv-costs__note">The daily statements for this period don’t record loss rates.</p>
         ) : (
           <>
             <p className="ecv-costs__flow">
@@ -313,7 +313,7 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
   const t = data.totals;
   const provisional = data.rows.filter((r) => !r.is_locked).length;
   return (
-    <Card title={head} sub={`${plant.name} · ${formatRange(period.from, period.to)} · locked figures from ergOS are official`}
+    <Card title={head} sub={`${plant.name} · ${formatRange(period.from, period.to)} · locked figures are final`}
       actions={<>
         <PeriodSheets rows={data.rows} plantId={plant.plant_id} />
         {t.allLocked ? <Chip tone="accent"><Icon name="check" size={13} />Locked</Chip> : <Chip tone="warning">Provisional · {provisional} day{provisional === 1 ? '' : 's'}</Chip>}
@@ -335,7 +335,7 @@ function SavingsTable({ data, plant, period, title }: Ctx & { title?: string }) 
                   <td className="num">{inr(r.volume_cleared_kwh)}</td>
                   <td className="num">{r.avg_landed_iex_tariff !== null ? r.avg_landed_iex_tariff.toFixed(4) : '—'}</td>
                   <td className="num">{inr(r.iex_total_cost, 2)}</td>
-                  <td className="num" title={r.benchmark_source === 'implied' ? 'Worked back from ergOS’s savings: ergOS stores no grid cost for this day' : r.benchmark_estimated ? 'Estimated from the DISCOM ToD tariff: ergOS has no figures for this day' : undefined}>
+                  <td className="num" title={r.benchmark_source === 'implied' ? 'Provisional: worked back from the day’s savings while its grid cost is being finalised' : r.benchmark_estimated ? 'Provisional: estimated from the DISCOM ToD tariff until the day’s statement is final' : undefined}>
                     {r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{r.avg_grid_tariff !== null ? r.avg_grid_tariff.toFixed(4) : '—'}</td>
                   <td className="num">{r.benchmark_estimated ? <span className="ecv-est">≈</span> : null}{inr(r.grid_total_cost, 2)}</td>
                   <td className={'num' + (r.net_savings_per_day < 0 ? ' neg' : '')}>{r.benchmark_estimated && r.benchmark_source !== 'implied' ? <span className="ecv-est">≈</span> : null}{inr(r.net_savings_per_day, 2)}</td>

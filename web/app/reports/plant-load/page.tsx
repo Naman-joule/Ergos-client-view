@@ -134,7 +134,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
   const source = (
     <p className="ecv-load__source">
       Captured by the plant’s data logger meter. Latest reading received: <b>{last ? `${formatDateLong(last.slice(0, 10))}, ${last.slice(11)} IST` : 'none yet'}</b>.
-      {last && last.slice(0, 10) < today ? ' Nothing has arrived for today yet; it appears here once the logger’s data reaches ergOS.' : ''}
+      {last && last.slice(0, 10) < today ? ' Nothing has arrived for today yet; it appears here once the plant’s data logger uploads.' : ''}
     </p>
   );
   if (monthMode && monthData) {

@@ -3238,3 +3238,39 @@ body {
   text-align: center;
   font-size: 13px;
 }
+
+/* ---- client wording: plain one-liners and the Billing "how is this calculated" note ---- */
+.ecv-clientnote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.ecv-howcalc {
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--glass);
+}
+.ecv-howcalc > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.ecv-howcalc > summary::-webkit-details-marker {
+  display: none;
+}
+.ecv-howcalc > summary span {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.ecv-howcalc[open] > summary span {
+  text-decoration: none;
+}
+.ecv-howcalc p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}

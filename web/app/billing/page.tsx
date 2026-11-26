@@ -15,6 +15,7 @@ import { WidgetCell, WidgetGrid } from '@/components/widgets/WidgetGrid';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Empty, Notice } from '@/components/ui/Empty';
+import { isInternal } from '@/lib/audience';
 import { Icon } from '@/components/ui/Icon';
 import { StatTile } from '@/components/ui/StatTile';
 import { CostColumns, type CostColumn } from '@/components/charts/BillCharts';
@@ -74,12 +75,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     rate: d.demandKwh ? d.totalCostRs / d.demandKwh : null, demandKwh: d.demandKwh, empty: !d.blocks,
   })) : [];
 
+  const internal = isInternal(user);
   return (
     <Shell user={user} page="billing" liveBlock={currentBlock()} syncLag={view.lag} themeMode={loaded.spec.theme.mode} dataTo={view.dataTo}>
-      {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} in the last {months} months. Check that the sync is running.</Notice> : null}
-      <Notice>Calculated with ergOS’s billing method: grid kWh × DISCOM tariff × (1 + FPPCA%) × (1 + duty%), all solar × solar tariff,
-        exchange × landed rate, in every metered 15-minute block. Until a month has been checked against ergOS, treat these as estimates.</Notice>
-      {t.fallbackDays > 0 ? <Notice>ergOS has no tariff rows for {sel.plant.name} on {t.fallbackDays} day{t.fallbackDays === 1 ? '' : 's'}; those are priced with the regulatory ToD schedule instead.</Notice> : null}
+      {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} in the last {months} months{internal ? '. Check that the sync is running.' : ' yet.'}</Notice> : null}
+      <details className="ecv-howcalc">
+        <summary>Calculated from your meter readings, IEX trades and DISCOM tariffs. Your DISCOM and IEX invoices remain the official bills. <span>How is this calculated?</span></summary>
+        <p>For every 15-minute block with a meter reading: grid energy = demand − solar − banked energy drawn − IEX energy delivered (after transmission losses).
+          Grid cost = grid energy × DISCOM ToD rate × (1 + FPPCA) × (1 + electricity duty). Solar cost = solar energy × solar tariff.
+          IEX cost = the day’s cost on your daily savings statement (so it matches the Savings page); days without a statement use the trade’s landed cost plus cross-subsidy surcharge.
+          Fixed and demand charges aren’t included.</p>
+      </details>
+      {internal && t.fallbackDays > 0 ? <Notice>ergOS has no tariff rows for {sel.plant.name} on {t.fallbackDays} day{t.fallbackDays === 1 ? '' : 's'}; those are priced with the regulatory ToD schedule instead.</Notice> : null}
       {unpriced > 0.5 ? <Notice>{inr(unpriced)} kWh from the grid fall in blocks with no DISCOM ToD rate, so they aren’t costed. The grid cost for those months is understated.</Notice> : null}
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/billing', { client: c.client_id, months })}
@@ -152,7 +159,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
 
         <WidgetCell span="full" type="billing.months">
           <Card title="Monthly bill summary"
-            sub={`${sel.plant.name} · ${range} · bill = grid + power exchange + solar, as ergOS calculates it`}>
+            sub={`${sel.plant.name} · ${range} · bill = grid + IEX + solar`}>
             <div className="ecv-table-wrap">
               <table className="ecv-table">
                 <thead>
@@ -174,7 +181,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
                 </tfoot>
               </table>
             </div>
-            <p className="eg-card__sub ecv-footnote">Energy bill as ergOS calculates it. Fixed/demand charges aren’t part of ergOS’s calculation. Your DISCOM and IEX invoices remain the official bills.</p>
+            <p className="eg-card__sub ecv-footnote">Energy cost from your meter readings. Fixed and demand charges aren’t included. Your DISCOM and IEX invoices remain the official bills.</p>
           </Card>
         </WidgetCell>
       </WidgetGrid>
