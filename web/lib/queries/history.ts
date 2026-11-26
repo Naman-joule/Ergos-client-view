@@ -128,12 +128,12 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
              sum(coalesce(charge, 0))::float8 AS charge, sum(coalesce(discharge, 0))::float8 AS discharge
       FROM banking WHERE plant_id = $1 AND date BETWEEN $2::date AND $3::date
       GROUP BY 1, 2`, [plantId, from, to]),
-    // ergOS's savings statements: where one exists, its exchange cost is the day's cost (Savings shows it)
+    // days with an ergOS savings statement (the trades' cost is used either way, as ergOS's own screens do)
     q<{ d: string; cost: number; kwh: number }>(STATEMENT_COSTS_SQL, [plantId, '', from, to]),
     hasSchedFn || hasBillFn ? Promise.resolve(null) : todSchedule(q, plantId, to),
   ]);
 
-  // ---- tariffs, as ergOS bills: ergOS's own tariff rows (app_bill_tariff: rate × (1+FPPCA%)(1+duty%), as its savings statement prices grid energy); days or
+  // ---- tariffs, as ergOS bills: ergOS's own tariff rows (app_bill_tariff: rate × (1+FPPCA%), no duty, as ergOS's dashboard and bill); days or
   // months it has no rows for fall back to the ToD schedule (app_tod_schedule). Up to a month: every day (exact,
   // handles a mid-month change); longer: once per month (each lookup scans the state's tariff rows, and per-day
   // lookups over long ranges ran into the statement timeout on production-sized tables).
@@ -143,8 +143,12 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   for (let d = from; d <= to; d = addDays(d, 1)) dateList.push(d);
   const keyDates = monthly ? [...new Set(dateList.map((d) => (d.slice(0, 7) + '-01' < from ? from : d.slice(0, 7) + '-01')))] : dateList;
   const keyOf = (d: string) => (monthly ? d.slice(0, 7) : d);
+  // ergOS's dashboard and bill price grid energy at base × (1 + FPPCA), without electricity duty (Haldiram C1:
+  // 5.78 / 6.80 / 7.82 ₹/kWh); app_bill_tariff's grid_rate adds duty, so rebuild the rate without it
+  const gridExpr = (fn: string) => (fn === 'app_bill_tariff'
+    ? 'CASE WHEN t.base_rate IS NULL THEN t.grid_rate ELSE t.base_rate * (1 + coalesce(t.fppca_pct, 0) / 100) END' : 't.grid_rate');
   const lookup = (fn: string, keys: string[]) => (keys.length ? q<SchedRow>(`
-      SELECT ${monthly ? "to_char(k, 'YYYY-MM')" : 'k::text'} AS d, t.block, t.tod, t.grid_rate, t.solar_rate
+      SELECT ${monthly ? "to_char(k, 'YYYY-MM')" : 'k::text'} AS d, t.block, t.tod, ${gridExpr(fn)} AS grid_rate, t.solar_rate
       FROM unnest($2::date[]) AS k CROSS JOIN LATERAL ${fn}($1, k) t`, [plantId, keys]) : Promise.resolve([] as SchedRow[]));
   const billRows = hasBillFn ? await lookup('app_bill_tariff', keyDates) : [];
   const billKeys = new Set(billRows.map((r) => r.d));
@@ -176,19 +180,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     day.iexKwh[t.block_no - 1]! += t.kwh || 0;
     day.iexLanded[t.block_no - 1]! += t.landed || 0;
   }
-  // One exchange cost across the app: on days with a savings statement, scale the day's block costs so they add
-  // up to the statement's cost (the split across blocks keeps the trades' shape). Days without one keep the
-  // trades' landed cost + CSS. e.g. Haldiram C1, 4 Nov: statement ₹53,928.71, trades + CSS ₹59,221.24.
-  const statementDays = new Set<string>();
-  for (const st of statements) {
-    const day = byDay.get(st.d);
-    if (!day) continue;
-    const landed = day.iexLanded.reduce((a, v) => a + v, 0);
-    if (!(landed > 0) || !(st.cost > 0)) continue;
-    const k = st.cost / landed;
-    day.iexLanded = day.iexLanded.map((v) => v * k);
-    statementDays.add(st.d);
-  }
+  const statementDays = new Set<string>(statements.map((st) => st.d));
   for (const b of banking) {
     const day = byDay.get(b.d);
     if (!day || b.block < 1 || b.block > 96) continue;
@@ -253,7 +245,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
       date, blocks: now + 1, gridCostRs: bill.gridCostRs, solarCostRs: bill.solarCostRs, exchangeCostRs: bill.exchangeCostRs,
       totalCostRs: billTotal(bill), bankSavedRs: bill.bankSavedRs, allGridCostRs: bill.allGridCostRs, gridUnpricedKwh: bill.gridUnpricedKwh,
       pricedBy: pricedBy.get(keyOf(date)) ?? null, bill,
-      exchangeFrom: statementDays.has(date) ? 'statement' : day.iexKwh.some((k) => k > 0) ? 'trades' : null,
+      exchangeFrom: day.iexKwh.some((k) => k > 0) ? (statementDays.has(date) ? 'statement' : 'trades') : null,
       demandKwh: sum(upTo(day.demandKwh)), iexKwh, iexUsedKwh: sum(upTo(a.iexUsed)) / 4,
       solarKwh: sum(upTo(day.solarKwh)), solarUsedKwh: sum(upTo(a.solarUsed)) / 4,
       bankKwh: sum(upTo(a.bank)) / 4, gridKwh: sum(upTo(a.grid)) / 4, surplusKwh: sum(upTo(a.surplus)) / 4,

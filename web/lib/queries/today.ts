@@ -1,6 +1,5 @@
 import 'server-only';
 import { buyRows } from './exchange';
-import { STATEMENT_COSTS_SQL } from './statement';
 import type { Query } from '../db';
 import { parsePrebid, sumCurves } from '../prebid';
 import { addDays, currentBlock, istToday } from '../time';
@@ -118,7 +117,7 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
   );
   const plantIds = [plantId, ...mappings.map((m) => m.source_plant_id)];
 
-  const [meter, trades, prebids, banking, histMeter, histIex, tariff, statements] = await Promise.all([
+  const [meter, trades, prebids, banking, histMeter, histIex, tariff] = await Promise.all([
     q<{ plant_id: number; block: number; kwh: number }>(BLOCK_SQL, [plantIds, date, shift]),
     q<{ block_no: number; kwh: number; landed: number; mcp: number | null }>(`
       SELECT block_no, sum(kwh)::float8 AS kwh, sum(landed)::float8 AS landed,
@@ -149,8 +148,6 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
       FROM ${buyRows("b.plant_id = $1 AND b.date BETWEEN $2::date - 6 AND $2::date")} t
       GROUP BY date`, [plantId, date]),
     todSchedule(q, plantId, date),
-    // ergOS's savings statements: their exchange cost is the day's cost, as on Savings and Billing
-    q<{ d: string; cost: number; kwh: number }>(STATEMENT_COSTS_SQL, [plantId, '', addDays(date, -6), date]),
   ]);
 
   // ---- per-block series
@@ -181,15 +178,6 @@ export async function loadToday(q: Query, plantId: number, date: string): Promis
     iexRate[i] = t.kwh ? t.landed / t.kwh : null;
     mcp[i] = t.mcp;
   }
-  // one exchange cost across the app: scale the day's block costs to its savings statement, when there is one
-  const stmt = new Map(statements.map((r) => [r.d, r.cost]));
-  const dayCost = stmt.get(date);
-  const tradedCost = iexLanded.reduce((a, v) => a + v, 0);
-  if (dayCost && tradedCost > 0) {
-    const k = dayCost / tradedCost;
-    for (let i = 0; i < 96; i++) { iexLanded[i] *= k; if (iexRate[i] != null) iexRate[i]! *= k; }
-  }
-  for (const r of histIex) { const c = stmt.get(r.d); if (c && r.landed > 0) r.landed = c; }
 
   const demand = demandKwh.map((k) => k * 4);
   const solar = solarKwh.map((k) => k * 4);

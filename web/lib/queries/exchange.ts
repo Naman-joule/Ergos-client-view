@@ -1,4 +1,4 @@
-// Exchange (IEX) purchases priced the way ergOS's daily savings statement prices them. The cleared quantity less
+// Exchange (IEX) purchases priced the way ergOS's dashboard and bill price them. The cleared quantity less
 // open-access losses (distribution, CTU, STU) is what reaches the plant; its cost is the landed cost plus
 // cross-subsidy surcharge (CSS) on the delivered kWh. e.g. Haldiram C1, 4 Nov 2026: 12,750 kWh cleared ×
 // (1 − 3%)(1 − 3.95%)(1 − 3.18%) = 11,501.2 kWh delivered; CSS 0.49 × 11,501.2 = ₹5,635.60, as on its statement.

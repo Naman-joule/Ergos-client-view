@@ -144,12 +144,9 @@ export function TodView(input: TodViewProps) {
                   </g>
                 );
               })}
-              {r.demand > 0 ? (
-                <>
-                  <line x1={x0} x2={x1} y1={Y(demandKw)} y2={Y(demandKw)} className="ecv-tod__demand" />
-                  {w >= 24 ? <text x={(x0 + x1) / 2} y={Y(Math.max(demandKw, base)) - 7} className="eg-axis eg-axis--strong" textAnchor="middle">{energy(r.demand)}</text> : null}
-                </>
-              ) : null}
+              {/* label on top = the period's supply (all sources stacked), as ergOS shows it; demand is the dotted line */}
+              {r.demand > 0 ? <line x1={x0} x2={x1} y1={Y(demandKw)} y2={Y(demandKw)} className="ecv-tod__demand" /> : null}
+              {w >= 24 && base > 0 ? <text x={(x0 + x1) / 2} y={Y(Math.max(demandKw, base)) - 7} className="eg-axis eg-axis--strong" textAnchor="middle">{energy(r.parts.reduce((t, p) => t + p.mwh, 0))}</text> : null}
               {/* period label under every bar; narrow bars at the edges are anchored inward so they don't clip */}
               <text x={r.end >= 95 && w < 90 ? x1 + 4 : r.start === 0 && w < 90 ? x0 : (x0 + x1) / 2} y={H - 14}
                 className={'eg-axis eg-axis--strong' + (w < 90 ? ' ecv-tod__label--sm' : '')}
@@ -173,7 +170,7 @@ export function TodView(input: TodViewProps) {
         ))}
       </svg>
       <p className="eg-card__sub ecv-footnote">
-        Bar width is the period’s duration; height is average kW; labels are energy. Costs use the IEX landed rate, the DISCOM ToD rate for the plant’s voltage level plus FPPCA, and the solar tariff where known.{srcNote ? ` ${srcNote}` : ''}
+        Bar width is the period’s duration; height is average kW; the label above each bar is the period’s supply, the dotted line its demand. Costs use the IEX landed rate, the DISCOM ToD rate for the plant’s voltage level plus FPPCA, and the solar tariff where known.{srcNote ? ` ${srcNote}` : ''}
       </p>
     </div>
   );

@@ -89,10 +89,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {!t.daysWithData ? <Notice>No meter data for {sel.plant.name} in the last {months} months{internal ? '. Check that the sync is running.' : ' yet.'}</Notice> : null}
       <details className="ecv-howcalc">
         <summary>Calculated from your meter readings, IEX trades and DISCOM tariffs. Your DISCOM and IEX invoices remain the official bills. <span>How is this calculated?</span></summary>
-        <p>For every 15-minute block with a meter reading: grid energy = demand − solar − banked energy drawn − IEX energy delivered (after transmission losses).
-          Grid cost = grid energy × DISCOM ToD rate × (1 + FPPCA) × (1 + electricity duty). Solar cost = solar energy × solar tariff.
-          IEX cost = the day’s cost on your daily savings statement (so it matches the Savings page); days without a statement use the trade’s landed cost plus cross-subsidy surcharge.
-          Fixed and demand charges aren’t included.</p>
+        <p>The same method as ergOS’s dashboard and bill, for every 15-minute block with a meter reading: IEX energy delivered = cleared energy less
+          transmission losses; IEX cost = the trade’s landed cost plus cross-subsidy surcharge on the delivered energy. Grid energy = demand − solar − banked
+          energy drawn − IEX energy delivered; grid cost = grid energy × DISCOM ToD rate × (1 + FPPCA). Solar cost = solar energy × solar tariff.
+          Electricity duty, fixed and demand charges aren’t included. The Savings page uses ergOS’s daily savings statements instead, so its IEX cost can differ slightly.</p>
       </details>
       {internal && t.fallbackDays > 0 ? <Notice>ergOS has no tariff rows for {sel.plant.name} on {t.fallbackDays} day{t.fallbackDays === 1 ? '' : 's'}; those are priced with the regulatory ToD schedule instead.</Notice> : null}
       {unpriced > 0.5 ? <Notice>{inr(unpriced)} kWh from the grid fall in blocks with no DISCOM ToD rate, so they aren’t costed. The grid cost for those months is understated.</Notice> : null}
