@@ -129,7 +129,7 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
     hasSchedFn || hasBillFn ? Promise.resolve(null) : todSchedule(q, plantId, to),
   ]);
 
-  // ---- tariffs, as ergOS bills: ergOS's own tariff rows (app_bill_tariff: rate × (1+FPPCA%), duty left out as ergOS does); days or
+  // ---- tariffs, as ergOS bills: ergOS's own tariff rows (app_bill_tariff: rate × (1+FPPCA%)(1+duty%), as its savings statement prices grid energy); days or
   // months it has no rows for fall back to the ToD schedule (app_tod_schedule). Up to a month: every day (exact,
   // handles a mid-month change); longer: once per month (each lookup scans the state's tariff rows, and per-day
   // lookups over long ranges ran into the statement timeout on production-sized tables).
@@ -139,12 +139,8 @@ export async function loadHistory(q: Query, plantId: number, period: HistoryPeri
   for (let d = from; d <= to; d = addDays(d, 1)) dateList.push(d);
   const keyDates = monthly ? [...new Set(dateList.map((d) => (d.slice(0, 7) + '-01' < from ? from : d.slice(0, 7) + '-01')))] : dateList;
   const keyOf = (d: string) => (monthly ? d.slice(0, 7) : d);
-  // ergOS prices grid energy at the base rate with FPPCA and no electricity duty (its bill for Haldiram C1:
-  // 5.78 / 6.80 / 7.82 ₹/kWh) — app_bill_tariff's grid_rate also adds duty, so rebuild the rate without it
-  const gridExpr = (fn: string) => (fn === 'app_bill_tariff'
-    ? 'CASE WHEN t.base_rate IS NULL THEN t.grid_rate ELSE t.base_rate * (1 + coalesce(t.fppca_pct, 0) / 100) END' : 't.grid_rate');
   const lookup = (fn: string, keys: string[]) => (keys.length ? q<SchedRow>(`
-      SELECT ${monthly ? "to_char(k, 'YYYY-MM')" : 'k::text'} AS d, t.block, t.tod, ${gridExpr(fn)} AS grid_rate, t.solar_rate
+      SELECT ${monthly ? "to_char(k, 'YYYY-MM')" : 'k::text'} AS d, t.block, t.tod, t.grid_rate, t.solar_rate
       FROM unnest($2::date[]) AS k CROSS JOIN LATERAL ${fn}($1, k) t`, [plantId, keys]) : Promise.resolve([] as SchedRow[]));
   const billRows = hasBillFn ? await lookup('app_bill_tariff', keyDates) : [];
   const billKeys = new Set(billRows.map((r) => r.d));
