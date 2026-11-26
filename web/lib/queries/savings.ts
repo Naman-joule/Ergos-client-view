@@ -93,16 +93,23 @@ export interface HeatRow { label: string; date: string; values: number[] }
 export interface SavingsData { rows: SavingsRow[]; totals: SavingsTotals; tod: TodSplitRow[]; heat: HeatRow[] }
 
 /**
- * Daily statements that belong to plant $1 (name $2). ergOS doesn't always fill plant_id on
- * iex_tod_daily_obligation, so a statement with no plant_id also counts when its portfolio is the
- * plant's (from its cleared trades or open access charges) or its plant_name is the plant's name.
+ * Daily statements that belong to plant $1. ergOS doesn't always fill plant_id on iex_tod_daily_obligation;
+ * a statement without one belongs to the plant when its portfolio is this plant's (from its cleared trades or
+ * open access charges) and no other plant's, so a multi-plant portfolio's statement isn't counted under each
+ * plant. Plant names are not matched: two clients can name a plant the same (migration 011 closes the same gap
+ * in RLS). $2 (the plant name) is kept in the signature for callers but no longer used.
  */
 const STATEMENT_OF_PLANT = `(
   o.plant_id = $1
-  OR (o.plant_id IS NULL AND (
-       o.portfolio_id IN (SELECT DISTINCT b.portfolio_id FROM trading_result_block b WHERE b.plant_id = $1 AND b.portfolio_id IS NOT NULL)
-    OR o.portfolio_id IN (SELECT c.portfolio_id FROM plant_open_access_charges c WHERE c.plant_id = $1)
-    OR lower(trim(o.plant_name)) = lower(trim($2::text))
+  OR (o.plant_id IS NULL AND $2::text IS NOT NULL AND o.portfolio_id IN (
+       SELECT u.portfolio_id FROM (
+         SELECT b.portfolio_id, b.plant_id FROM trading_result_block b WHERE b.portfolio_id IS NOT NULL
+         UNION
+         SELECT c.portfolio_id, c.plant_id FROM plant_open_access_charges c
+       ) u
+       WHERE u.portfolio_id IN (SELECT portfolio_id FROM trading_result_block WHERE plant_id = $1 AND portfolio_id IS NOT NULL
+                                UNION SELECT portfolio_id FROM plant_open_access_charges WHERE plant_id = $1)
+       GROUP BY u.portfolio_id HAVING bool_and(u.plant_id = $1)
   ))
 )`;
 
