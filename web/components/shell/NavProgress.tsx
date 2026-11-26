@@ -16,7 +16,10 @@ export function NavProgress() {
   useEffect(() => { setOn(false); window.clearTimeout(timer.current); }, [path, search]);
 
   useEffect(() => {
-    const start = () => { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setOn(true), 120); };
+    const start = () => {
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => { setOn(true); timer.current = window.setTimeout(() => setOn(false), 15_000); }, 120);   // never spin forever
+    };
     const click = (e: MouseEvent) => {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const a = (e.target as Element | null)?.closest?.('a');
@@ -28,7 +31,9 @@ export function NavProgress() {
     };
     const submit = (e: SubmitEvent) => {
       const f = e.target as HTMLFormElement;
-      if ((f.method || 'get').toLowerCase() === 'get' && !f.action.includes('/api/')) start();
+      const action = f.getAttribute('action') ?? '';
+      // only real page loads: a plain GET form to a page (React server-action forms have a javascript: action)
+      if ((f.getAttribute('method') ?? 'get').toLowerCase() === 'get' && action && !action.startsWith('javascript:') && !action.includes('/api/')) start();
     };
     document.addEventListener('click', click, true);
     document.addEventListener('submit', submit, true);

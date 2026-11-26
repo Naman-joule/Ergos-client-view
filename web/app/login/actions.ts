@@ -20,7 +20,7 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
   const generic = { error: 'That email and password don’t match an active account.', email };
 
   if (!email || !password) return { error: 'Enter your email and password.', email };
-  if (isLocked(email)) return { error: 'Too many attempts. Try again in 5 minutes.', email };
+  if (await isLocked(email)) return { error: 'Too many attempts. Try again in 15 minutes, or ask your Joulewise contact to reset your password.', email };
 
   try {
     const rows = await anonymous((q) =>
@@ -29,10 +29,10 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
     const user = rows[0];
     const ok = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
     if (!user || !ok || !user.is_active) {
-      recordFailure(email);
+      await recordFailure(email);
       return generic;
     }
-    clearFailures(email);
+    await clearFailures(email);
 
     (await cookies()).set(SESSION_COOKIE, await signSession(user.id), {
       httpOnly: true,

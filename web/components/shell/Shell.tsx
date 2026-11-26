@@ -4,13 +4,14 @@ import { Icon } from '../ui/Icon';
 import { ThemeToggle } from './ThemeToggle';
 import { LiveRefresh } from './LiveRefresh';
 import { NavGroup } from './NavGroup';
+import { UserMenu } from './UserMenu';
 import { iconSvg } from '@/lib/ui/icon-svg';
 import { blockEnd } from '@/lib/time';
 import type { SessionUser } from '@/lib/auth';
 import { ago, timeState } from '@/lib/time-state';
 
-export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports' | 'load';
-const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'IEX obligation reports', load: 'Plant load report' };
+export type Page = 'energy' | 'savings' | 'billing' | 'prices' | 'reports' | 'load' | 'account';
+const TITLES: Record<Page, string> = { energy: 'Energy', savings: 'Savings', billing: 'Billing & costing', prices: 'IEX prices', reports: 'IEX obligation reports', load: 'Plant load report', account: 'Your account' };
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('') || '·';
@@ -93,12 +94,16 @@ export function Shell({ user, page, liveBlock, syncLag, themeMode, live = false,
               <span className="ecv-badge__dot" aria-hidden="true" />{badge.text}
             </span>
             <ThemeToggle moonSvg={iconSvg('moon', 18)} defaultMode={themeMode} />
-            <form method="post" action="/logout">
-              <button className="eg-icon-btn eg-icon-btn--sm" type="submit" aria-label="Sign out" title="Sign out">
-                <Icon name="arrow-right" size={18} />
-              </button>
-            </form>
-            <span className="eg-avatar eg-avatar--lg ecv-avatar" title={`${user.name} · ${user.email}`}>{initials(user.name)}</span>
+            {/* user menu: who is signed in, account settings, sign out (a bare arrow icon wasn't recognisable) */}
+            <UserMenu summary={initials(user.name)} label={`Account menu for ${user.name}`} title={`${user.name} · ${user.email}`}>
+              <div className="ecv-usermenu__panel" role="menu">
+                <div className="ecv-usermenu__who"><b>{user.name}</b><span>{user.email}</span><span>{role}</span></div>
+                <Link role="menuitem" className="ecv-usermenu__item" href="/account"><Icon name="shield" size={16} />Account and password</Link>
+                <form method="post" action="/logout">
+                  <button role="menuitem" className="ecv-usermenu__item" type="submit"><Icon name="arrow-right" size={16} />Sign out</button>
+                </form>
+              </div>
+            </UserMenu>
           </div>
         </header>
         <div className={`ecv-slot${state === 'stale' ? ' is-open' : ''}`} aria-hidden={state !== 'stale'}>

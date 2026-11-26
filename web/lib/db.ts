@@ -67,3 +67,8 @@ export function withUserWrite<T>(userId: number, fn: (q: Query) => Promise<T>): 
 export function anonymous<T>(fn: (q: Query) => Promise<T>): Promise<T> {
   return inTransaction('BEGIN READ ONLY', null, fn);
 }
+
+/** No user, read-write: only for the login lockout functions (app_login_failed / app_login_succeeded). */
+export function anonymousWrite<T>(fn: (q: Query) => Promise<T>): Promise<T> {
+  return inTransaction('BEGIN', null, fn);
+}
