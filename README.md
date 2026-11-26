@@ -78,7 +78,7 @@ Environment variables (Production and Preview):
 | `DATABASE_URL` | transaction pooler URL for `ergos_view_app` (port 6543) |
 | `SESSION_SECRET` | 32+ random characters (`openssl rand -base64 48`) |
 | `DATABASE_SSL_CA` | optional: Supabase CA certificate PEM, to verify the database certificate |
-| `METER_TS_CONVENTION` | `end` (default) or `start`, see assumptions below |
+| `METER_TS_CONVENTION` | `start` (default, as ergOS stores it) or `end`, see assumptions below |
 
 Do **not** put `ADMIN_DATABASE_URL` or any owner credentials on Vercel. Add a Vercel Firewall rate-limit rule on
 `/login`: the in-app throttle only covers one warm instance.
@@ -126,8 +126,9 @@ Demo logins (password `demo-password`): `admin@`, `manager@`, `cement@`, `films@
 
 ## Assumptions to confirm against real ergOS data
 
-1. **Meter timestamp convention**: `meter_timestamp` marks the *end* of the 15-minute interval
-   (`METER_TS_CONVENTION=end`). If it marks the start, set `start`, or every block shifts by one.
+1. **Meter timestamp convention** (confirmed on Haldiram C1, 26 Nov 2026): `meter_timestamp` marks the *start* of
+   the 15-minute block, as ergOS uses it: the 00:00 reading has `date` = that day and opens the day's running `kwh`
+   (`METER_TS_CONVENTION=start`, the default). Set `end` only for a source where it marks the end (the demo seed).
 2. **`kwh_delta` already includes `energy_multiplier`**: the app does not apply it again.
 3. **`cleared_price` units**: values above 100 are treated as ₹/MWh and divided by 1000.
 4. **`prebid_plan_data` shape**: the parser in `web/lib/prebid.ts` accepts several shapes; anything else shows

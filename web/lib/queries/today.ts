@@ -5,9 +5,13 @@ import { parsePrebid, sumCurves } from '../prebid';
 import { addDays, currentBlock, istToday } from '../time';
 import { allocate } from '../supply';
 
-/** 15 minutes when meter_timestamp marks the end of the interval (default), 0 when it marks the start. */
+/**
+ * 0 when meter_timestamp marks the start of its 15-minute block (default, as ergOS stores it), 15 minutes when it
+ * marks the end. ergOS's own data shows the start: the 00:00 reading carries date = that day and starts the day's
+ * running kWh (Haldiram C1, 26 Nov: 00:00 → kwh 91.136 = its kwh_delta), and ergOS's dashboard counts it as block 1.
+ */
 export function meterShift(): string {
-  return process.env.METER_TS_CONVENTION === 'start' ? '0 minutes' : '15 minutes';
+  return process.env.METER_TS_CONVENTION === 'end' ? '15 minutes' : '0 minutes';
 }
 
 // Bucket each reading by its shifted IST timestamp, not by the stored date column.
