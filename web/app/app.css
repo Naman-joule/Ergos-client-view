@@ -3293,3 +3293,18 @@ body {
   font-size: 12px;
   color: var(--warning, #d9a03f);
 }
+
+/* Energy timeline: the end labels (00:00, 24:00) are edge-aligned and ran into their neighbours
+   ("00:00 02:00", "22:00 24:00"); drop the tick next to each end */
+.ecv-supply .eg-ac__tick.is-first + .eg-ac__tick,
+.ecv-supply .eg-ac__tick:has(+ .eg-ac__tick.is-last) {
+  visibility: hidden;
+}
+
+/* very narrow phones (360 px): the bill total doesn't fit beside "MWh × rate =", so it takes its own line */
+@container (max-width: 400px) {
+  .ecv-bill__row--total > :nth-child(6) {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}

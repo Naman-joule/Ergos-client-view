@@ -8,7 +8,7 @@ import { lastReading, loadPlantLoad, loadPlantLoadMonth, type LoadBlock, type Lo
 import { MonthView } from './MonthView';
 import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Icon } from '@/components/ui/Icon';
-import { blockEnd, blockStart, currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
+import { addDays, blockEnd, blockStart, currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
 import { inr } from '@/lib/format';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
@@ -135,7 +135,8 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
   const source = (
     <p className="ecv-load__source">
       Captured by the plant’s data logger meter. Latest reading received: <b>{last ? `${formatDateLong(last.slice(0, 10))}, ${last.slice(11)} IST` : 'none yet'}</b>.
-      {last && last.slice(0, 10) < today ? ' Nothing has arrived for today yet; it appears here once the plant’s data logger uploads.' : ''}
+      {/* a logger that uploads once a day is normally a day behind: only flag it when it's later than that */}
+      {last && last.slice(0, 10) < addDays(today, -1) ? ` No readings have arrived since then; the plant’s data logger may not be uploading.` : ''}
     </p>
   );
   if (monthMode && monthData) {
