@@ -760,3 +760,18 @@ body { font-variant-numeric: tabular-nums; }
   .ecv-navgroup__menu { left: auto; right: 8px; top: auto; bottom: calc(100% + 8px); }
   .ecv-navgroup__btn[aria-current="page"] { background: transparent; color: var(--accent); }
 }
+
+/* ---- Plant load: monthly report export ---- */
+.ecv-loadexport { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); }
+.ecv-loadexport__title { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ecv-loadexport__title > span { display: grid; }
+.ecv-loadexport__title b { font-size: 14px; font-weight: 600; }
+.ecv-loadexport__title small { font-size: 12px; color: var(--ink-muted); }
+.ecv-loadexport__pick { gap: var(--space-2); flex-wrap: wrap; }
+.ecv-loadexport__pick .ecv-date input { min-width: 150px; }
+@media (max-width: 599px) {
+  .ecv-loadexport__pick { width: 100%; }
+  .ecv-loadexport__pick .ecv-date { flex: 1 1 0; min-width: 0; }
+  .ecv-loadexport__pick .ecv-date input { min-width: 0; width: 100%; }
+  .ecv-loadexport__pick .ecv-export { flex: 1 1 100%; justify-content: center; }
+}

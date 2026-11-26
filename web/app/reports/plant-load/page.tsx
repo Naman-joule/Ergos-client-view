@@ -112,6 +112,24 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
       </>
     )}
   </>;
+  const clientPlants = view.scope.plants.filter((pl) => pl.client_id === sel.client.client_id).length;
+  const exportTo = monthMode ? month : date.slice(0, 7);
+  const exportBar = (
+    <form method="get" action="/api/export/plant-load" className="eg-glass ecv-loadexport" aria-label="Export monthly load report">
+      <input type="hidden" name="client" value={sel.client.client_id} />
+      <span className="ecv-loadexport__title"><Icon name="download" size={16} />
+        <span><b>Monthly load report</b><small>Excel · maximum, minimum load and consumption for {clientPlants === 1 ? 'the plant' : `all ${clientPlants} plants`} of {sel.client.alias_name || sel.client.name}</small></span>
+      </span>
+      <span className="eg-row ecv-loadexport__pick">
+        <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
+          <input type="month" name="from" defaultValue={shiftMonth(exportTo, -6)} max={thisMonth} aria-label="From month" required /></label>
+        <Icon name="arrow-right" size={15} />
+        <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
+          <input type="month" name="to" defaultValue={exportTo} max={thisMonth} aria-label="To month" required /></label>
+        <button className="ecv-sheet ecv-sheet--excel ecv-export" type="submit"><Icon name="download" size={14} />Export</button>
+      </span>
+    </form>
+  );
   const source = (
     <p className="ecv-load__source">
       Captured by the plant’s data logger meter. Latest reading received: <b>{last ? `${formatDateLong(last.slice(0, 10))}, ${last.slice(11)} IST` : 'none yet'}</b>.
@@ -126,6 +144,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
           plantHref={(p) => monthLink({ plant: p.plant_id })} controls={controls} />
         <div className="ecv-stack">
           {source}
+          {exportBar}
           <MonthView data={monthData} month={month} plantName={sel.plant.name} dayHref={(d) => link({ date: d })} />
         </div>
       </Shell>
@@ -146,6 +165,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
 
       <div className="ecv-stack">
         {source}
+        {exportBar}
 
         {!hasData ? (
           <Card title={`Plant load · ${day}`}>

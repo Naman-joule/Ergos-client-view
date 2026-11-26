@@ -6,6 +6,7 @@ import { todName } from './tod';
 import type { HistoryData } from './queries/history';
 import type { BillingData, BillSummary } from './queries/billing';
 import type { IexData, IexRangeData, IexRow } from './queries/iex';
+import type { PlantMonthLoad } from './queries/plant-load';
 
 // Excel exports. Today's export and History's download are the same workbook (a one-day range for Today),
 // built from loadHistory(..., { detail: true }), so the file always matches what the pages show.
@@ -162,4 +163,107 @@ export async function iexRangeWorkbook(x: IexRangeData, rows: IexRow[], generate
     { sheet: 'Block-wise', data: blocks, stickyRowsCount: 3, columns: [{ width: 13 }, { width: 8 }, { width: 8 }, { width: 8 }, ...Array.from({ length: 6 }, () => ({ width: 15 }))] },
     { sheet: 'Daily averages', data: daily, stickyRowsCount: 3, columns: [{ width: 13 }, ...Array.from({ length: 6 }, () => ({ width: 16 }))] },
   ], { fontFamily: 'Calibri', fontSize: 11 }).toBuffer();
+}
+
+// ---------------------------------------------------------------------------- plant load: monthly report
+// Same layout as the Haldiram monthly min / max load workbook: a summary matrix (max, min, consumption by plant
+// and month), a detailed row per plant and month, and connected load vs recorded peak.
+
+export interface LoadReportPlant { plant_id: number; name: string; connected_load: number | null }
+
+const MON_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MON_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monShort = (m: string) => `${MON_SHORT[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+const monLong = (m: string) => `${MON_LONG[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+const mw = (v: number | null) => (v == null ? '—' : `${Number.isInteger(v) ? v.toFixed(1) : v} MW`);
+
+const FONT = 'Segoe UI';
+const BORDER = { borderStyle: 'thin' as const, borderColor: '#BFBFBF' };
+const L = {
+  title: (v: string, span: number) => ({ value: v, type: String, columnSpan: span, fontFamily: FONT, fontSize: 14, fontWeight: 'bold' as const,
+    textColor: '#FFFFFF', backgroundColor: '#1F4E79', align: 'center' as const, alignVertical: 'center' as const, height: 28 }),
+  subtitle: (v: string, span: number) => ({ value: v, type: String, columnSpan: span, fontFamily: FONT, fontSize: 10,
+    textColor: '#E0F1E5', backgroundColor: '#2F5597', align: 'center' as const, alignVertical: 'center' as const, height: 20 }),
+  section: (v: string) => ({ value: v, type: String, fontFamily: FONT, fontSize: 11, fontWeight: 'bold' as const, textColor: '#1F4E79' }),
+  head: (v: string, bg = '#2F5597') => ({ value: v, type: String, fontFamily: FONT, fontSize: 10, fontWeight: 'bold' as const, textColor: '#FFFFFF',
+    backgroundColor: bg, align: 'center' as const, alignVertical: 'center' as const, wrap: true, height: 24, ...BORDER }),
+  num: (v: number, o: { bg?: string; bold?: boolean } = {}) => ({ value: Math.round(v * 100) / 100, type: Number, format: '#,##0.00', fontFamily: FONT, fontSize: 10,
+    align: 'right' as const, ...(o.bg ? { backgroundColor: o.bg } : {}), ...(o.bold ? { fontWeight: 'bold' as const } : {}), ...BORDER }),
+  text: (v: string, o: { center?: boolean; bold?: boolean } = {}) => ({ value: v, type: String, fontFamily: FONT, fontSize: 10,
+    ...(o.center ? { align: 'center' as const } : {}), ...(o.bold ? { fontWeight: 'bold' as const } : {}), ...BORDER }),
+  int: (v: number) => ({ value: v, type: Number, fontFamily: FONT, fontSize: 10, align: 'center' as const, ...BORDER }),
+  none: () => ({ value: '—', type: String, fontFamily: FONT, fontSize: 9, textColor: '#666666', align: 'center' as const, ...BORDER }),
+};
+
+export async function plantLoadWorkbook(x: {
+  client: string; plants: LoadReportPlant[]; months: string[]; rows: PlantMonthLoad[]; generatedAt: string;
+}): Promise<Buffer> {
+  const at = new Map(x.rows.map((r) => [`${r.plant_id}|${r.month}`, r]));
+  const get = (p: LoadReportPlant, m: string) => at.get(`${p.plant_id}|${m}`);
+  const who = x.client.toUpperCase();
+  const period = x.months.length ? `${monLong(x.months[0]!)} to ${monLong(x.months[x.months.length - 1]!)}` : '';
+  const W = x.months.length + 3;
+
+  // ---- sheet 1: monthly summary matrix
+  const matrix: SheetData = [
+    [L.title(`${who} PLANTS — MONTHLY DEMAND & LOAD REPORT`, W)],
+    [L.subtitle(`Period: ${period} | Unit: Kilowatts (kW) based on 15-minute billing blocks (kwh_delta * 4.0) | Generated ${x.generatedAt} IST`, W)],
+    [],
+  ];
+  const table = (title: string, bg: string, cellBg: string | undefined, last: string,
+    value: (r: PlantMonthLoad) => number, period: (vals: number[]) => number) => {
+    matrix.push([L.section(title)]);
+    matrix.push([L.head('Plant Name', bg), L.head('Connected Load', bg), ...x.months.map((m) => L.head(monShort(m), bg)), L.head(last, bg)]);
+    for (const p of x.plants) {
+      const vals = x.months.map((m) => get(p, m)).map((r) => (r ? value(r) : null));
+      const have = vals.filter((v): v is number => v != null);
+      matrix.push([L.text(p.name, { bold: true }), L.text(mw(p.connected_load), { center: true }),
+        ...vals.map((v) => (v == null ? L.none() : L.num(v, { bg: cellBg }))),
+        have.length ? L.num(period(have), { bold: true }) : L.none()]);
+    }
+    matrix.push([], []);
+  };
+  table('TABLE 1: MAXIMUM LOAD / PEAK DEMAND (kW)', '#2F5597', '#FCE4D6', 'Period Peak', (r) => r.max_kw, (v) => Math.max(...v));
+  table('TABLE 2: MINIMUM LOAD / BASE DEMAND (kW)', '#418F59', '#DDEBF7', 'Period Min', (r) => r.min_kw, (v) => Math.min(...v));
+  table('TABLE 3: TOTAL CONSUMPTION (MWh)', '#7030A0', undefined, 'Period Total', (r) => r.kwh / 1000, (v) => v.reduce((a, b) => a + b, 0));
+
+  // ---- sheet 2: one row per plant and month
+  const H2 = ['Plant ID', 'Plant Name', 'Connected Load (MW)', 'Month', 'Status', 'Max Load (kW)', 'Max Date', 'Max Time', 'Max Block',
+    'Min Load (kW)', 'Min Date', 'Min Time', 'Min Non-Zero (kW)', 'Average Load (kW)', 'Total Energy (MWh)'];
+  const detail: SheetData = [[L.title(`${who} PLANTS — MONTHLY DEMAND DETAILED AUDIT TABLE`, H2.length)], [], H2.map((h) => L.head(h))];
+  for (const p of x.plants) {
+    for (const m of x.months) {
+      const r = get(p, m);
+      const lead = [L.int(p.plant_id), L.text(p.name), p.connected_load != null ? L.num(p.connected_load) : L.none(), L.text(monLong(m)),
+        L.text(r ? 'Active' : 'No readings', { center: true })];
+      detail.push(r ? [...lead,
+        L.num(r.max_kw), L.text(r.max_date, { center: true }), L.text(blockStart(r.max_block), { center: true }), L.int(r.max_block),
+        L.num(r.min_kw), L.text(r.min_date, { center: true }), L.text(blockStart(r.min_block), { center: true }),
+        r.min_nonzero_kw != null ? L.num(r.min_nonzero_kw) : L.none(), L.num(r.avg_kw), L.num(r.kwh / 1000)]
+        : [...lead, ...Array.from({ length: 10 }, () => L.none())]);
+    }
+  }
+
+  // ---- sheet 3: connected load vs the period's recorded peak
+  const H3 = ['Plant ID', 'Plant Name', 'Connected Load (MW)', 'Connected Load (kW)', 'Recorded Peak (kW)', 'Peak Month & Date', 'Peak % of Connected Load'];
+  const capacity: SheetData = [[L.title(`${who} PLANTS — CONTRACT CAPACITY VS PEAK RECORDED DEMAND`, H3.length)], [], H3.map((h) => L.head(h))];
+  for (const p of x.plants) {
+    const peak = x.months.map((m) => get(p, m)).filter((r): r is PlantMonthLoad => !!r)
+      .reduce<PlantMonthLoad | null>((a, r) => (!a || r.max_kw > a.max_kw ? r : a), null);
+    const kw = p.connected_load != null ? p.connected_load * 1000 : null;
+    const share = peak && kw ? peak.max_kw / kw : null;
+    const over = share != null && share > 1;
+    capacity.push([L.int(p.plant_id), L.text(p.name), p.connected_load != null ? L.num(p.connected_load) : L.none(), kw != null ? L.num(kw) : L.none(),
+      peak ? L.num(peak.max_kw) : L.none(),
+      peak ? L.text(`${monLong(peak.month)} (${peak.max_date} ${blockStart(peak.max_block)})`) : L.none(),
+      share != null ? { value: share, type: Number, format: '0.0%', fontFamily: FONT, fontSize: 10, align: 'center' as const, ...BORDER,
+        ...(over ? { backgroundColor: '#FFC7CE', textColor: '#9C0006', fontWeight: 'bold' as const } : {}) } : L.none()]);
+  }
+
+  return writeXlsxFile([
+    { sheet: 'Monthly Summary Matrix', data: matrix, columns: [{ width: 44 }, { width: 18 }, ...x.months.map(() => ({ width: 12 })), { width: 16 }] },
+    { sheet: 'Detailed Interval Records', data: detail,
+      columns: [12, 17, 23, 18, 20, 17, 14, 12, 13, 17, 14, 12, 21, 21, 22].map((width) => ({ width })) },
+    { sheet: 'Capacity & Peak Analysis', data: capacity, columns: [12, 17, 23, 23, 22, 37, 28].map((width) => ({ width })) },
+  ], { fontFamily: FONT, fontSize: 10 }).toBuffer();
 }
