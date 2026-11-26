@@ -1,8 +1,8 @@
 import 'server-only';
 import type { Query } from '../db';
 import { meterShift } from './today';
-import { buildPlantLoad, type LoadBlock, type LoadSummary, type MeterRow } from '../plant-load';
-export type { LoadBlock, LoadFlag, LoadSummary } from '../plant-load';
+import { buildMonthLoad, buildPlantLoad, type BlockKwh, type LoadBlock, type LoadSummary, type MeterRow, type MonthLoad } from '../plant-load';
+export type { DayLoad, LoadBlock, LoadFlag, LoadPoint, LoadSummary, MonthLoad } from '../plant-load';
 
 /**
  * Plant load report: one day of the plant's own energy meter, as its data logger recorded it, block by block.
@@ -37,4 +37,27 @@ export async function lastReading(q: Query, plantId: number): Promise<string | n
     SELECT to_char(max(meter_timestamp) AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') AS ts
     FROM plant_processed_meter_data WHERE plant_id = $1`, [plantId]);
   return r?.ts ?? null;
+}
+
+/**
+ * Month of plant load: each block's energy for every day from `from` to `to` (bucketed exactly as the day view),
+ * then each day's and the month's maximum and minimum load. Readings flagged 'missing' carry no value and are
+ * left out, as in the day view.
+ */
+export async function loadPlantLoadMonth(q: Query, plantId: number, from: string, to: string): Promise<MonthLoad> {
+  const rows = await q<BlockKwh>(`
+    WITH m AS (
+      SELECT kwh_delta, flags, (meter_timestamp AT TIME ZONE 'Asia/Kolkata') - $4::interval AS t
+      FROM plant_processed_meter_data
+      WHERE plant_id = $1 AND date BETWEEN $2::date - 1 AND $3::date + 1
+    )
+    SELECT t::date::text AS d, (extract(hour FROM t) * 4 + floor(extract(minute FROM t) / 15) + 1)::int AS block,
+           sum(kwh_delta)::float8 AS kwh
+    FROM m
+    WHERE t::date BETWEEN $2::date AND $3::date AND kwh_delta IS NOT NULL
+      AND lower(trim(coalesce(flags, ''))) <> 'missing'
+    GROUP BY 1, 2`, [plantId, from, to, meterShift()]);
+  const dates: string[] = [];
+  for (let d = from; d <= to; d = new Date(Date.parse(d + 'T00:00:00Z') + 86_400_000).toISOString().slice(0, 10)) dates.push(d);
+  return buildMonthLoad(rows, dates);
 }

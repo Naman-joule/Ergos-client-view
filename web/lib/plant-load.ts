@@ -114,3 +114,57 @@ export function buildPlantLoad(rows: MeterRow[]): { blocks: LoadBlock[]; summary
     },
   };
 }
+
+// ---- month view: each day's maximum and minimum load, and the month's ----------------------------------
+
+/** One block's energy for a day (blocks whose readings are all flagged 'missing' are left out by the query). */
+export interface BlockKwh { d: string; block: number; kwh: number }
+
+export interface LoadPoint { kw: number; date: string; block: number }
+export interface DayLoad {
+  date: string;
+  blocks: number;                // blocks with a reading
+  kwh: number;
+  max: LoadPoint | null; min: LoadPoint | null;
+  avgKw: number | null;          // over blocks with a reading
+  loadFactor: number | null;     // avg ÷ max
+}
+export interface MonthLoad {
+  days: DayLoad[];               // every day of the month up to `last`, in order; days without readings stay empty
+  max: LoadPoint | null; min: LoadPoint | null;
+  avgKw: number | null; loadFactor: number | null;
+  kwh: number; blocks: number; daysWithData: number;
+}
+
+/**
+ * Daily and monthly maximum / minimum load from block energies (load kW = block kWh × 4). Only blocks that have
+ * a reading count; a day with none has no max, min or average, rather than zeros. Ties go to the earliest block.
+ */
+export function buildMonthLoad(rows: BlockKwh[], dates: string[]): MonthLoad {
+  const byDay = new Map<string, Map<number, number>>(dates.map((d) => [d, new Map()]));
+  for (const r of rows) {
+    const day = byDay.get(r.d);
+    if (!day || r.block < 1 || r.block > 96 || !Number.isFinite(r.kwh)) continue;
+    day.set(r.block, (day.get(r.block) ?? 0) + r.kwh);
+  }
+  let mMax: LoadPoint | null = null, mMin: LoadPoint | null = null, mKw = 0, mBlocks = 0, mKwh = 0;
+  const days: DayLoad[] = dates.map((date) => {
+    const blocks = [...byDay.get(date)!.entries()].sort((a, b) => a[0] - b[0]);
+    let max: LoadPoint | null = null, min: LoadPoint | null = null, sumKw = 0, kwh = 0;
+    for (const [block, e] of blocks) {
+      const kw = e * 4;
+      kwh += e; sumKw += kw;
+      if (!max || kw > max.kw) max = { kw, date, block };
+      if (!min || kw < min.kw) min = { kw, date, block };
+    }
+    if (max && (!mMax || max.kw > mMax.kw)) mMax = max;
+    if (min && (!mMin || min.kw < mMin.kw)) mMin = min;
+    mKw += sumKw; mBlocks += blocks.length; mKwh += kwh;
+    const avgKw = blocks.length ? sumKw / blocks.length : null;
+    return { date, blocks: blocks.length, kwh, max, min, avgKw, loadFactor: avgKw != null && max?.kw ? avgKw / max.kw : null };
+  });
+  const avgKw = mBlocks ? mKw / mBlocks : null;
+  const top = mMax as LoadPoint | null;
+  return { days, max: top, min: mMin, avgKw, loadFactor: avgKw != null && top?.kw ? avgKw / top.kw : null,
+    kwh: mKwh, blocks: mBlocks, daysWithData: days.filter((d) => d.blocks > 0).length };
+}

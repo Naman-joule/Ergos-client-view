@@ -65,3 +65,27 @@ test('no readings: empty report, no figures invented', () => {
   assert.equal(r.summary.maxKw, null); assert.equal(r.summary.avgKw, null); assert.equal(r.summary.openingKwh, null);
   assert.equal(r.summary.none, 96);
 });
+
+import { buildMonthLoad } from '../lib/plant-load.ts';
+
+test('month: daily and monthly max / min load, empty days stay empty', () => {
+  const m = buildMonthLoad([
+    { d: '2026-11-01', block: 1, kwh: 100 }, { d: '2026-11-01', block: 2, kwh: 300 }, { d: '2026-11-01', block: 3, kwh: 50 },
+    { d: '2026-11-03', block: 40, kwh: 400 }, { d: '2026-11-03', block: 41, kwh: 200 },
+    { d: '2026-11-03', block: 41, kwh: 20 },     // two readings in one block add up
+    { d: '2026-12-01', block: 1, kwh: 999 },     // outside the dates: ignored
+  ], ['2026-11-01', '2026-11-02', '2026-11-03']);
+  assert.deepEqual(m.days[0]!.max, { kw: 1200, date: '2026-11-01', block: 2 });
+  assert.deepEqual(m.days[0]!.min, { kw: 200, date: '2026-11-01', block: 3 });
+  assert.equal(m.days[1]!.max, null); assert.equal(m.days[1]!.avgKw, null); assert.equal(m.days[1]!.blocks, 0);
+  assert.equal(m.days[2]!.min!.kw, 880);
+  assert.deepEqual(m.max, { kw: 1600, date: '2026-11-03', block: 40 });
+  assert.deepEqual(m.min, { kw: 200, date: '2026-11-01', block: 3 });
+  assert.equal(m.daysWithData, 2); assert.equal(m.blocks, 5); assert.equal(m.kwh, 1070);
+  assert.equal(m.avgKw, (1070 * 4) / 5);
+});
+
+test('month with no readings: nothing invented', () => {
+  const m = buildMonthLoad([], ['2026-11-01', '2026-11-02']);
+  assert.equal(m.max, null); assert.equal(m.min, null); assert.equal(m.avgKw, null); assert.equal(m.daysWithData, 0);
+});
