@@ -5,6 +5,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Script from 'next/script';
 import { cookies } from 'next/headers';
+import { Suspense } from 'react';
+import { NavProgress } from '@/components/shell/NavProgress';
 
 export const metadata: Metadata = {
   title: { default: 'ergOS client view', template: '%s · ergOS' },
@@ -33,6 +35,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </pattern>
           </defs>
         </svg>
+        <Suspense fallback={null}><NavProgress /></Suspense>
         {children}
         <Script src="/vendor/ergos/harmony.js" strategy="afterInteractive" />
       </body>
