@@ -81,14 +81,7 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
   const covered = (m: ObligationMarket) => rows.filter((r) => r.market === m).length;
   const portfolios = [...new Set(rows.map((r) => r.portfolio_name ?? r.portfolio_code).filter(Boolean))];
 
-  return (
-    <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
-      {isAdmin && !obligationFtpConfigured() ? <Notice>Uploads and downloads are switched off: set OBLIGATION_FTP_URL on the server (a write account for the obligation folder only).</Notice> : null}
-      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
-        clientHref={(c) => href('/market/reports', { client: c.client_id })}
-        plantHref={(p) => href('/market/reports', { client: sel.client.client_id, plant: p.plant_id })}
-        controls={<ReportTabs user={user} current="obligation" client={sel.client.client_id} plant={sel.plant.plant_id} />}
-        below={
+  const monthStrip = (
           <nav className="ecv-obl__months" aria-label="Month">
             {strip.map((m) => (
               <a key={m} href={pageHref(m)} aria-current={m === month ? 'page' : undefined}>
@@ -96,7 +89,16 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
               </a>
             ))}
           </nav>
-        } />
+  );
+
+  return (
+    <Shell user={user} page="reports" liveBlock={currentBlock()} syncLag={view.lag} themeMode="dark">
+      {isAdmin && !obligationFtpConfigured() ? <Notice>Uploads and downloads are switched off: set OBLIGATION_FTP_URL on the server (a write account for the obligation folder only).</Notice> : null}
+      <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
+        clientHref={(c) => href('/market/reports', { client: c.client_id })}
+        plantHref={(p) => href('/market/reports', { client: sel.client.client_id, plant: p.plant_id })}
+        controls={<ReportTabs user={user} current="obligation" client={sel.client.client_id} plant={sel.plant.plant_id} />}
+        below={monthStrip} sticky={monthStrip} />
 
       <div className="ecv-stack">
         {isAdmin ? (

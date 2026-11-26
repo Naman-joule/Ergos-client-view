@@ -5,7 +5,7 @@ import { blockEnd, blockStart } from './time';
 import { todName } from './tod';
 import type { HistoryData } from './queries/history';
 import type { BillingData, BillSummary } from './queries/billing';
-import type { IexData } from './queries/iex';
+import type { IexData, IexRangeData, IexRow } from './queries/iex';
 
 // Excel exports. Today's export and History's download are the same workbook (a one-day range for Today),
 // built from loadHistory(..., { detail: true }), so the file always matches what the pages show.
@@ -142,5 +142,24 @@ export async function iexWorkbook(x: IexData, generatedAt: string): Promise<Buff
   return writeXlsxFile([
     { sheet: 'Block-wise', data: blocks, stickyRowsCount: 3, columns: [{ width: 13 }, { width: 8 }, { width: 8 }, { width: 8 }, ...Array.from({ length: 6 }, () => ({ width: 15 }))] },
     { sheet: 'Last 30 days', data: trend, stickyRowsCount: 3, columns: [{ width: 13 }, ...Array.from({ length: 6 }, () => ({ width: 16 }))] },
+  ], { fontFamily: 'Calibri', fontSize: 11 }).toBuffer();
+}
+
+/** A range of IEX prices: every block (one row per day and block, markets side by side) and the daily averages. */
+export async function iexRangeWorkbook(x: IexRangeData, rows: IexRow[], generatedAt: string): Promise<Buffer> {
+  const keys = x.markets.map((m) => m.key);
+  const title: Row = [t(`IEX market clearing prices · ${x.from} to ${x.to} · generated ${generatedAt} IST · ergOS client view`)];
+  const blocks: SheetData = [title, [], [H('Date'), H('Block'), H('From'), H('To'),
+    ...keys.map((k) => H(`${k} ₹/kWh`)), ...keys.map((k) => H(`${k} cleared MW`))]];
+  for (const r of rows) {
+    blocks.push([d(r.date), n(r.block), t(blockStart(r.block)), t(blockEnd(r.block)),
+      ...keys.map((k) => rate(r.mcp[k])), ...keys.map((k) => n(r.mcv[k], '#,##0.00'))]);
+  }
+  blocks.push([], [{ value: 'Volume-weighted average', type: String, fontWeight: 'bold' }, null, null, null, ...x.markets.map((m) => rate(m.avg))]);
+  const daily: SheetData = [title, [], [H('Date'), ...keys.map((k) => H(`${k} avg ₹/kWh`)), ...keys.map((k) => H(`${k} cleared MWh`))]];
+  for (const day of x.trend) daily.push([d(day.date), ...keys.map((k) => rate(day.avg[k])), ...keys.map((k) => kwh(day.mwh[k]))]);
+  return writeXlsxFile([
+    { sheet: 'Block-wise', data: blocks, stickyRowsCount: 3, columns: [{ width: 13 }, { width: 8 }, { width: 8 }, { width: 8 }, ...Array.from({ length: 6 }, () => ({ width: 15 }))] },
+    { sheet: 'Daily averages', data: daily, stickyRowsCount: 3, columns: [{ width: 13 }, ...Array.from({ length: 6 }, () => ({ width: 16 }))] },
   ], { fontFamily: 'Calibri', fontSize: 11 }).toBuffer();
 }

@@ -22,10 +22,12 @@ function clientMeta(plants: PlantRow[]): string {
  * The page's scope: which client (switcher) and which plant (grid), plus page controls on the right
  * (day pager on Today, period on Savings).
  */
-export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls, below }: {
+export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls, below, sticky }: {
   scope: Scope; client: ClientRow; plant: PlantRow;
   clientHref: (c: ClientRow) => string; plantHref: (p: PlantRow) => string;
   controls?: ReactNode; below?: ReactNode;
+  /** what follows the user down the page; default: the controls, else what's below */
+  sticky?: ReactNode;
 }) {
   const byClient = (id: number) => scope.plants.filter((p) => p.client_id === id);
   const clients: ClientOption[] = scope.clients.map((c) => ({
@@ -58,8 +60,8 @@ export function ScopeBar({ scope, client, plant, clientHref, plantHref, controls
         </div>
         {below}
       </section>
-      {controls || below ? (
-        <StickyBar title={<>{plant.name}<small>{client.alias_name || client.name}</small></>}>{controls ?? below}</StickyBar>
+      {sticky || controls || below ? (
+        <StickyBar title={<>{plant.name}<small>{client.alias_name || client.name}</small></>}>{sticky ?? controls ?? below}</StickyBar>
       ) : null}
     </>
   );

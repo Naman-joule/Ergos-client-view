@@ -1,5 +1,5 @@
 # One-off full re-sync: re-copies every plant's history from ergOS, so past months match what ergOS holds now
-# (savings statements recalculated after the 120-day savings window, trades, banking and meter readings).
+# (savings statements recalculated after the 120-day savings window, trades, banking, IEX prices, meter readings).
 # Copies real ergOS rows only; nothing is generated.
 #
 # Steps run one after another (init containers), each in its own transaction: if a step fails, that table is
@@ -48,6 +48,14 @@ spec:
           image: ergos-view-sync:2
           imagePullPolicy: IfNotPresent
           args: ["--tier", "fast", "--tables", "banking", "--backfill-days", "730"]
+          envFrom: [{ secretRef: { name: ergos-view-sync } }]
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
+        # IEX market prices (DAM, RTM, GDAM) for the IEX prices page's date ranges. Needs IEX_DATABASE_URL in the
+        # secret; without it the sync logs a warning and skips these tables.
+        - name: iex-prices
+          image: ergos-view-sync:2
+          imagePullPolicy: IfNotPresent
+          args: ["--tier", "fast", "--tables", "day_ahead_market_snapshot,real_time_market_snapshot,green_day_ahead_market_snapshot", "--backfill-days", "730"]
           envFrom: [{ secretRef: { name: ergos-view-sync } }]
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 1Gi } }
       containers:

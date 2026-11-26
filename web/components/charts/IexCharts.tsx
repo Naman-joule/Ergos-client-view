@@ -21,13 +21,25 @@ export function IexDayChart({ markets, dayLabel }: { markets: MarketLine[]; dayL
   );
 }
 
-export function IexTrendChart({ trend, markets }: { trend: TrendPoint[]; markets: { key: string; label: string; slot: string }[] }) {
+export function IexTrendChart({ trend, markets, aria = 'Daily volume-weighted clearing price, last 30 days' }: {
+  trend: TrendPoint[]; markets: { key: string; label: string; slot: string }[]; aria?: string;
+}) {
   const every = Math.ceil(trend.length / 8);
   return (
-    <LineChart aria="Daily volume-weighted clearing price, last 30 days" unit="₹/kWh" fmt={rs}
+    <LineChart aria={aria} unit="₹/kWh" fmt={rs}
       series={markets.map((m) => ({ key: m.key, label: m.label, slot: m.slot, values: trend.map((d) => d.avg[m.key] ?? null) }))}
       xLabel={(i) => dm(trend[i]!.date)} title={(i) => `${dm(trend[i]!.date)} · volume-weighted average`}
       ticks={trend.map((d, i) => ({ i, label: dm(d.date) })).filter((_, i) => i % every === 0 || i === trend.length - 1)}
       extra={(i) => markets.map((m) => ({ label: `${m.key} cleared`, value: trend[i]!.mwh[m.key] != null ? `${inr(Math.round(trend[i]!.mwh[m.key]!))} MWh` : '—' }))} />
+  );
+}
+
+/** Average clearing price at each block of the day across a range of days (the range's daily shape). */
+export function IexProfileChart({ markets, rangeLabel }: { markets: { key: string; label: string; slot: string; values: (number | null)[] }[]; rangeLabel: string }) {
+  return (
+    <LineChart aria={`Average clearing price by 15-minute block, ${rangeLabel}`} unit="₹/kWh" fmt={rs}
+      series={markets.map((m) => ({ key: m.key, label: m.label, slot: m.slot, values: m.values }))}
+      xLabel={(i) => `${hhmm(i)}–${hhmm(i + 1)}`} title={(i) => `Block ${i + 1} · ${hhmm(i)}–${hhmm(i + 1)} · average, ${rangeLabel}`}
+      ticks={[0, 16, 32, 48, 64, 80, 95].map((i) => ({ i, label: i === 95 ? '24:00' : hhmm(i) }))} />
   );
 }
