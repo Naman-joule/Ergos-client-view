@@ -5,6 +5,7 @@ import { syncLagMinutes } from '@/lib/queries/sync';
 import { latestMeterDate } from '@/lib/queries/today';
 import { lastReading, loadPlantLoad, loadPlantLoadMonth, type LoadBlock, type LoadFlag } from '@/lib/queries/plant-load';
 import { MonthView } from './MonthView';
+import { MonthSelect } from '@/components/ui/MonthSelect';
 import { Icon } from '@/components/ui/Icon';
 import { blockEnd, blockStart, currentBlock, formatDateLong, isYmd, istToday } from '@/lib/time';
 import { inr } from '@/lib/format';
@@ -95,7 +96,7 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
           <input type="hidden" name="plant" value={sel.plant.plant_id} />
           <input type="hidden" name="view" value="month" />
           <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
-            <input type="month" name="month" defaultValue={month} max={thisMonth} aria-label="Month" required /></label>
+            <MonthSelect name="month" value={month} max={thisMonth} label="Month" /></label>
           <button className="eg-btn eg-btn--primary eg-btn--sm" type="submit">Show month</button>
         </form>
       </>
@@ -122,10 +123,10 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
       </span>
       <span className="eg-row ecv-loadexport__pick">
         <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
-          <input type="month" name="from" defaultValue={shiftMonth(exportTo, -6)} max={thisMonth} aria-label="From month" required /></label>
+          <MonthSelect name="from" value={shiftMonth(exportTo, -6)} max={thisMonth} label="From month" /></label>
         <Icon name="arrow-right" size={15} />
         <label className="eg-input ecv-date"><Icon name="calendar" size={16} />
-          <input type="month" name="to" defaultValue={exportTo} max={thisMonth} aria-label="To month" required /></label>
+          <MonthSelect name="to" value={exportTo} max={thisMonth} label="To month" /></label>
         <button className="ecv-sheet ecv-sheet--excel ecv-export" type="submit"><Icon name="download" size={14} />Export</button>
       </span>
     </form>
