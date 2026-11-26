@@ -12,7 +12,6 @@ import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
 import { ScopeBar } from '@/components/shell/ScopeBar';
 import { DayPager } from '@/components/shell/DayPager';
-import { ReportTabs } from '@/components/shell/ReportTabs';
 import { Card } from '@/components/ui/Card';
 import { StatTile } from '@/components/ui/StatTile';
 import { Empty, Notice } from '@/components/ui/Empty';
@@ -78,7 +77,6 @@ export default async function PlantLoadPage({ searchParams }: { searchParams: Pr
     return new Date(Date.UTC(y, mm - 1 + n, 1)).toISOString().slice(0, 7); };
   const thisMonth = today.slice(0, 7);
   const controls = <>
-    <ReportTabs user={user} current="load" client={sel.client.client_id} plant={sel.plant.plant_id} />
     <nav className="eg-seg eg-seg--glass ecv-modes" aria-label="Period">
       <a href={link({ date: monthMode ? (month === thisMonth ? null : `${month}-01`) : undefined })} aria-current={!monthMode ? 'true' : undefined} aria-pressed={!monthMode}>Day</a>
       <a href={monthLink({ month: monthMode ? month : date.slice(0, 7) })} aria-current={monthMode ? 'true' : undefined} aria-pressed={monthMode}>Month</a>

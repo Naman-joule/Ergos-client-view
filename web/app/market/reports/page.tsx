@@ -9,7 +9,6 @@ import { addDays, currentBlock, formatDate, istToday } from '@/lib/time';
 import { href, one, type SP } from '@/lib/page-params';
 import { Shell } from '@/components/shell/Shell';
 import { ScopeBar } from '@/components/shell/ScopeBar';
-import { ReportTabs } from '@/components/shell/ReportTabs';
 import { Card } from '@/components/ui/Card';
 import { Empty, Notice } from '@/components/ui/Empty';
 import { Icon } from '@/components/ui/Icon';
@@ -97,7 +96,6 @@ export default async function ObligationReportsPage({ searchParams }: { searchPa
       <ScopeBar scope={view.scope} client={sel.client} plant={sel.plant}
         clientHref={(c) => href('/market/reports', { client: c.client_id })}
         plantHref={(p) => href('/market/reports', { client: sel.client.client_id, plant: p.plant_id })}
-        controls={<ReportTabs user={user} current="obligation" client={sel.client.client_id} plant={sel.plant.plant_id} />}
         below={monthStrip} sticky={monthStrip} />
 
       <div className="ecv-stack">
