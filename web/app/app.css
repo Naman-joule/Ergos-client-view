@@ -678,3 +678,36 @@ body { font-variant-numeric: tabular-nums; }
   .ecv-iexrange .ecv-date input { min-width: 0; width: 100%; }
   .ecv-iexrange button { flex: 1 1 100%; }
 }
+
+/* ---- Savings: where the landed cost goes (paid ₹ vs lost kWh) ---- */
+.ecv-costs { display: grid; gap: var(--space-2); }
+.ecv-costs + .ecv-costs { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px dashed var(--line); }
+.ecv-costs__head { margin: 0 0 var(--space-1); display: flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 600; color: var(--ink); }
+.ecv-costs__kind { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; letter-spacing: .02em; border: 1px solid var(--line); }
+.ecv-costs__kind--paid { background: color-mix(in srgb, var(--c-iex, var(--accent)) 18%, transparent); }
+.ecv-costs__kind--loss { background: var(--warning-soft); }
+.ecv-costs__group { display: grid; gap: 2px; }
+.ecv-costs__note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-muted); }
+.ecv-costs__note--warn { color: var(--ink); background: var(--warning-soft); padding: 6px 10px; border-radius: var(--radius-sm); }
+.ecv-costs__flow { margin: 0; font-size: 13px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.ecv-costs__flow b { color: var(--ink); font-weight: 600; }
+.ecv-costs__losses { display: grid; gap: var(--space-2); }
+.ecv-costs__loss { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--space-3); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ecv-costs__loss small { color: var(--ink-muted); }
+.ecv-costs__lossbar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.ecv-costs__lossbar span { display: block; height: 100%; width: var(--share); border-radius: 3px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--warning, #d9a03f) 75%, transparent) 0 4px, color-mix(in srgb, var(--warning, #d9a03f) 40%, transparent) 4px 8px); }
+.ecv-costs__rows { display: grid; gap: var(--space-3); }
+.ecv-costs__row { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--space-3); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ecv-costs__name { font-weight: 500; color: var(--ink); }
+.ecv-costs__val { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.ecv-costs__val small { color: var(--ink-muted); min-width: 44px; text-align: right; }
+.ecv-costs__bar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.ecv-costs__bar span { display: block; height: 100%; width: var(--share); min-width: 2px; border-radius: 4px; background: var(--row-c, var(--c-iex)); }
+.ecv-costs__row[data-series="iex"] { --row-c: var(--c-iex, var(--series-gov)); }
+.ecv-costs__row[data-series="grid"] { --row-c: var(--c-grid, var(--series-grid)); }
+.ecv-costs__row[data-series="wind"] { --row-c: var(--c-wind, var(--series-wind)); }
+.ecv-costs__row[data-series="demand"] { --row-c: var(--c-demand, var(--series-demand)); }
+.ecv-costs__row[data-series="solar"] { --row-c: var(--c-solar, var(--series-solar)); }
+.ecv-costs__row .ecv-costs__note { grid-column: 1 / -1; }
+.ecv-costs__kind { white-space: nowrap; flex: none; }

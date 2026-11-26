@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { SavingsWidget } from '@/lib/dashboard/schema';
-import { CHARGE_COLUMNS, type Period, type SavingsData, type SavingsRow } from '@/lib/queries/savings';
+import { CHARGE_COLUMNS, CHARGE_GROUPS, type Period, type SavingsData, type SavingsRow } from '@/lib/queries/savings';
 import { REPORT_KINDS, locateReport, parseDatedName, type ReportKind } from '@/lib/reports';
 import type { PlantRow } from '@/lib/queries/scope';
 import { compact, inr, pct, rate as fmtRate, rupeeParts, rupees } from '@/lib/format';
@@ -13,7 +13,6 @@ import { Track } from '../../ui/Track';
 import { Card } from '../../ui/Card';
 import { Empty } from '../../ui/Empty';
 import { StatTile } from '../../ui/StatTile';
-import { SourceBar } from '../../ui/SourceBar';
 import { SavingsChart } from '../../charts/SavingsChart';
 import { Heatmap } from '../../charts/Heatmap';
 
@@ -117,23 +116,92 @@ function SavingsDaily({ data, plant, period, title }: Ctx & { title?: string }) 
 }
 
 // ---------------------------------------------------------------------------- charges
-// Neutral, distinct tones for the charge tiles; avoids banking red and surplus blue, which mean something.
-const CHARGE_SERIES: SeriesKey[] = ['grid', 'wind', 'demand', 'solar', 'grid', 'wind', 'demand', 'solar', 'grid'];
+// Where the landed cost goes, in two clearly separate parts:
+//   1. what was paid (₹): the exchange energy, then the charges on top of it, grouped by what they pay for;
+//   2. what was lost (kWh): energy bought on the exchange that the networks lose before it reaches the plant.
+//      Losses aren't a separate payment: they're energy paid for in (1) that never arrives, which raises the
+//      price of each kWh that does.
+const CHARGE_LABEL = Object.fromEntries(CHARGE_COLUMNS) as Record<string, string>;
+const GROUP_SERIES: SeriesKey[] = ['grid', 'wind', 'demand', 'solar'];
+
+function CostRow({ series, name, value, whole, note }: { series: SeriesKey; name: string; value: number; whole: number; note: string }) {
+  const share = whole ? Math.max(0, Math.min(1, value / whole)) : 0;
+  return (
+    <div className="ecv-costs__row" data-series={series} style={{ '--share': `${(share * 100).toFixed(1)}%` } as React.CSSProperties}>
+      <span className="ecv-costs__name">{name}</span>
+      <span className="ecv-costs__val"><b>{rupees(value)}</b><small>{pct(share, 1)}</small></span>
+      <span className="ecv-costs__bar" aria-hidden="true"><span /></span>
+      <span className="ecv-costs__note">{note}</span>
+    </div>
+  );
+}
 
 function SavingsCharges({ data, plant, period, title }: Ctx & { title?: string }) {
   const head = title ?? 'Where the landed cost goes';
   if (!data.rows.length) return <NoRows title={head} ctx={{ data, plant, period }} />;
   const t = data.totals;
   const whole = t.iexCost || 1;
+  const L = t.losses;
+  const lostKwh = L.ctuKwh + L.stuKwh + L.distKwh;
+  const deliveredKwh = L.clearedKwh - lostKwh;
+  const maxLoss = Math.max(L.ctuKwh, L.stuKwh, L.distKwh);
+  const energyRate = t.volumeKwh ? t.energy / t.volumeKwh : null;              // ₹ per cleared kWh of energy
+  const showUnaccounted = Math.abs(t.unaccounted) > Math.max(1, t.iexCost * 0.005);
+  const lossRows = [
+    { key: 'ctu', name: 'Inter-state network (CTU)', kwh: L.ctuKwh, pct: L.ctuPct },
+    { key: 'stu', name: 'State network (STU)', kwh: L.stuKwh, pct: L.stuPct },
+    { key: 'dist', name: 'DISCOM network (distribution)', kwh: L.distKwh, pct: L.distPct },
+  ];
   return (
-    <Card title={head} sub={`Share of ${rupees(t.iexCost)} landed cost · ${formatRange(period.from, period.to)}`}>
-      <div className="ecv-sources">
-        <SourceBar series="iex" icon="exchange" name="Exchange energy" share={t.energyCharge / whole} value={`₹${compact(t.energyCharge)}`} unit="" />
-        {CHARGE_COLUMNS.map(([k, label], i) => (
-          <SourceBar key={k} series={CHARGE_SERIES[i]!} icon="receipt" name={label} share={t.charges[k] / whole}
-            value={`₹${compact(t.charges[k])}`} unit="" />
-        ))}
-      </div>
+    <Card title={head} sub={`${rupees(t.iexCost)} landed cost for ${inr(t.volumeKwh)} kWh bought · ${formatRange(period.from, period.to)}`}>
+      <section className="ecv-costs" aria-label="What was paid">
+        <h4 className="ecv-costs__head"><span className="ecv-costs__kind ecv-costs__kind--paid">Paid · ₹</span>What the landed cost is made of</h4>
+        <div className="ecv-costs__rows">
+          <CostRow series="iex" name="Exchange energy" value={t.energy} whole={whole}
+            note={t.energyDerivedDays > 0
+              ? `The power itself, at the exchange clearing price. ergOS didn’t itemise it on ${t.energyDerivedDays} day${t.energyDerivedDays === 1 ? '' : 's'}; there it’s the landed cost less the charges below.`
+              : 'The power itself, at the exchange clearing price'} />
+          {CHARGE_GROUPS.map((g, i) => {
+            const items = g.items.map((k) => ({ label: CHARGE_LABEL[k]!, v: t.charges[k] }));
+            const sum = items.reduce((a, x) => a + x.v, 0);
+            if (sum === 0) return null;
+            return <CostRow key={g.key} series={GROUP_SERIES[i]!} name={g.label} value={sum} whole={whole}
+              note={items.length > 1 ? `${g.hint}: ${items.filter((x) => x.v).map((x) => `${x.label} ${rupees(x.v)}`).join(' · ')}` : g.hint} />;
+          })}
+          {showUnaccounted
+            ? <p className="ecv-costs__note ecv-costs__note--warn">{rupees(Math.abs(t.unaccounted))} of the landed cost {t.unaccounted > 0 ? 'isn’t itemised in ergOS’s statements' : 'is itemised twice in ergOS’s statements'} (energy + charges {t.unaccounted > 0 ? 'fall short of' : 'exceed'} the landed cost).</p> : null}
+        </div>
+      </section>
+
+      <section className="ecv-costs ecv-costs--loss" aria-label="What was lost">
+        <h4 className="ecv-costs__head"><span className="ecv-costs__kind ecv-costs__kind--loss">Lost · kWh</span>Energy lost on the way to the plant</h4>
+        {L.days === 0 ? (
+          <p className="ecv-costs__note">ergOS’s statements for this period don’t record loss rates.</p>
+        ) : (
+          <>
+            <p className="ecv-costs__flow">
+              <b>{inr(L.clearedKwh)} kWh</b> bought <span aria-hidden="true">→</span> <b>{inr(lostKwh)} kWh</b> lost
+              ({pct(L.clearedKwh ? lostKwh / L.clearedKwh : 0, 1)}) <span aria-hidden="true">→</span> <b>{inr(deliveredKwh)} kWh</b> delivered
+            </p>
+            <div className="ecv-costs__losses">
+              {lossRows.map((r) => (
+                <div key={r.key} className="ecv-costs__loss" style={{ '--share': `${maxLoss ? (r.kwh / maxLoss) * 100 : 0}%` } as React.CSSProperties}>
+                  <span>{r.name}{r.pct != null ? <small> · {r.pct}% loss</small> : null}</span>
+                  <b>{inr(r.kwh)} kWh</b>
+                  <span className="ecv-costs__lossbar" aria-hidden="true"><span /></span>
+                </div>
+              ))}
+            </div>
+            <p className="ecv-costs__note">
+              Not an extra payment: this energy is inside the exchange energy above
+              {energyRate != null ? <> (worth about {rupees(lostKwh * energyRate)})</> : null}, paid for but never delivered.
+              {t.volumeKwh && deliveredKwh > 0 && L.clearedKwh === t.volumeKwh
+                ? <> So each delivered kWh costs {fmtRate(t.iexCost / deliveredKwh)}, against {fmtRate(t.iexCost / t.volumeKwh)} per kWh bought.</> : null}
+              {L.days < data.rows.length ? <> Loss rates recorded on {L.days} of {data.rows.length} days.</> : null}
+            </p>
+          </>
+        )}
+      </section>
     </Card>
   );
 }

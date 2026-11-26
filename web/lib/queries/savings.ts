@@ -38,6 +38,8 @@ export interface SavingsRow {
   ctu_transmission_charges: number; stu_transmission_charges: number; distribution_charges: number;
   nldc_application_fees: number; nldc_scheduling_buy: number; sldc_scheduling_charges: number;
   fees: number; igst: number; css: number;
+  /** open-access losses ergOS applied that day, % (migration 010; null when not recorded) */
+  distribution_loss_pct: number | null; ctu_loss_pct: number | null; stu_loss_pct: number | null;
   grid_total_cost: number; avg_grid_tariff: number | null; electricity_duty_amount: number;
   net_savings_per_day: number; percent_below_grid: number | null;
   excel_file_path: string | null; statement_docx_path: string | null; pdf_report_path: string | null; zip_bundle_path: string | null;
@@ -47,6 +49,16 @@ export interface SavingsRow {
   /** how the missing benchmark was filled: implied from ergOS's own savings, or estimated from the DISCOM tariff */
   benchmark_source?: 'implied' | 'tariff';
 }
+
+/** Charges grouped the way a bill reads: what each one pays for. */
+export const CHARGE_GROUPS = [
+  { key: 'network', label: 'Transmission and distribution charges', hint: 'For using the inter-state (CTU), state (STU) and DISCOM networks',
+    items: ['ctu_transmission_charges', 'stu_transmission_charges', 'distribution_charges'] },
+  { key: 'css', label: 'Cross-subsidy surcharge', hint: 'Paid to the DISCOM for buying power from outside it', items: ['css'] },
+  { key: 'ops', label: 'Scheduling and exchange fees', hint: 'Load-despatch scheduling (SLDC, NLDC) and IEX transaction fees',
+    items: ['sldc_scheduling_charges', 'nldc_scheduling_buy', 'nldc_application_fees', 'fees'] },
+  { key: 'tax', label: 'IGST', hint: 'GST on the fees', items: ['igst'] },
+] as const;
 
 export const CHARGE_COLUMNS = [
   ['ctu_transmission_charges', 'CTU transmission'],
@@ -66,6 +78,13 @@ export interface SavingsTotals {
   landedRate: number | null; benchmarkRate: number | null; percentBelow: number | null;
   tradeDays: number; best: SavingsRow | null; negativeDays: number; allLocked: boolean; estimatedDays: number; impliedDays: number;
   energyCharge: number; charges: Record<ChargeKey, number>;
+  /** exchange energy: ergOS's iex_energy_charge, or, on days it left that at 0, the landed cost less the charges */
+  energy: number; energyDerivedDays: number;
+  /** landed cost not explained by energy + charges (rounding, or a charge ergOS doesn't itemise) */
+  unaccounted: number;
+  /** open-access losses: energy bought but not delivered, by network, over the days ergOS recorded loss rates */
+  losses: { ctuKwh: number; stuKwh: number; distKwh: number; clearedKwh: number; days: number;
+            ctuPct: number | null; stuPct: number | null; distPct: number | null };
 }
 
 export interface TodSplitRow { tod_type: string; kwh: number; landed: number; grid: number }
@@ -128,7 +147,35 @@ export function totalsOf(rows: SavingsRow[]): SavingsTotals {
     impliedDays: rows.filter((r) => r.benchmark_source === 'implied').length,
     energyCharge: sum('iex_energy_charge'),
     charges,
+    ...breakdownOf(rows),
   };
+}
+
+/** Split each day's landed cost into energy + charges, and its cleared kWh into delivered + losses. */
+function breakdownOf(rows: SavingsRow[]) {
+  let energy = 0, energyDerivedDays = 0, unaccounted = 0;
+  const L = { ctuKwh: 0, stuKwh: 0, distKwh: 0, clearedKwh: 0, days: 0 };
+  const pcts = { ctu: new Set<number>(), stu: new Set<number>(), dist: new Set<number>() };
+  for (const r of rows) {
+    const charges = CHARGE_COLUMNS.reduce((a, [k]) => a + n(r[k]), 0);
+    const total = n(r.iex_total_cost);
+    let e = n(r.iex_energy_charge);
+    if (e <= 0 && total > charges) { e = total - charges; energyDerivedDays++; }
+    energy += e;
+    unaccounted += total - e - charges;
+    const kwh = n(r.volume_cleared_kwh);
+    if (kwh > 0 && (r.ctu_loss_pct != null || r.stu_loss_pct != null || r.distribution_loss_pct != null)) {
+      // the power passes the inter-state network, then the state's, then the DISCOM's; each loses its share
+      const ctu = kwh * n(r.ctu_loss_pct) / 100;
+      const stu = (kwh - ctu) * n(r.stu_loss_pct) / 100;
+      const dist = (kwh - ctu - stu) * n(r.distribution_loss_pct) / 100;
+      L.ctuKwh += ctu; L.stuKwh += stu; L.distKwh += dist; L.clearedKwh += kwh; L.days++;
+      pcts.ctu.add(n(r.ctu_loss_pct)); pcts.stu.add(n(r.stu_loss_pct)); pcts.dist.add(n(r.distribution_loss_pct));
+    }
+  }
+  const only = (s: Set<number>) => (s.size === 1 ? [...s][0]! : null);   // one rate over the period, else none to quote
+  return { energy, energyDerivedDays, unaccounted,
+    losses: { ...L, ctuPct: only(pcts.ctu), stuPct: only(pcts.stu), distPct: only(pcts.dist) } };
 }
 
 /**
@@ -185,6 +232,10 @@ export async function loadSavings(q: Query, plantId: number, plantName: string, 
              o.trade_date, o.volume_cleared_kwh, o.iex_energy_charge, o.iex_total_cost, o.avg_landed_iex_tariff,
              o.ctu_transmission_charges, o.stu_transmission_charges, o.distribution_charges, o.nldc_application_fees,
              o.nldc_scheduling_buy, o.sldc_scheduling_charges, o.fees, o.igst, o.css,
+             -- read through jsonb so the page still works before migration 010 adds these columns
+             (to_jsonb(o) ->> 'distribution_loss_pct')::float8 AS distribution_loss_pct,
+             (to_jsonb(o) ->> 'ctu_loss_pct')::float8 AS ctu_loss_pct,
+             (to_jsonb(o) ->> 'stu_loss_pct')::float8 AS stu_loss_pct,
              o.grid_total_cost, o.avg_grid_tariff, o.electricity_duty_amount, o.net_savings_per_day, o.percent_below_grid,
              o.excel_file_path, o.statement_docx_path, o.pdf_report_path, o.zip_bundle_path, coalesce(o.is_locked, false) AS is_locked
       FROM iex_tod_daily_obligation o
